@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite+aiosqlite:///app/data/inventory.db
+    volumes:
+      - inventory-data:/app/data
+    command: starbrew-inventory
+
+volumes:
+  inventory-data:

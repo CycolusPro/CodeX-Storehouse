@@ -1,0 +1,7 @@
+"""Inventory service package for managing food & beverage stock."""
+
+__all__ = [
+    "__version__",
+]
+
+__version__ = "0.1.0"

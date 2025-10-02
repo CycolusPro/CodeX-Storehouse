@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventory-service"
+version = "0.1.0"
+description = "Inventory management API tailored for food & beverage operations."
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [{ name = "Starbrew Engineering" }]
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.23.0",
+    "sqlalchemy>=2.0.25",
+    "aiosqlite>=0.19.0",
+    "pydantic>=1.10.0,<2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "httpx>=0.27.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+starbrew-inventory = "inventory_service.main:run"
+starbrew-init-db = "inventory_service.management:cli_init_database"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
