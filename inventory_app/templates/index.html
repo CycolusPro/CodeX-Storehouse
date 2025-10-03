@@ -53,7 +53,7 @@
                       <span class="text-white-50 small">实时把握库存动态</span>
                     </div>
                     <h1 class="display-6 fw-bold mb-3">库存控制中心</h1>
-                    <p class="lead text-white-50 mb-0">通过一目了然的数据卡片与操作面板，快速完成入库、出库及库存设定。</p>
+                    <p class="lead text-white-50 mb-0">通过一目了然的数据卡片与灵活的就地编辑，在浏览器中完成库存录入与调整。</p>
                   </div>
                   <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-2 g-3 flex-grow-1">
                     <div class="col">
@@ -117,47 +117,6 @@
 
         <div class="row g-4 mt-1">
           <div class="col-12 col-xl-8 d-flex flex-column gap-4">
-            <section class="card shadow-sm border-0 glass-card">
-              <div class="card-header bg-transparent border-bottom-0 pb-0">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div>
-                    <h2 class="h5 mb-1">库存操作面板</h2>
-                    <p class="text-muted small mb-0">选择操作类型后输入数量，即可完成对应的库存动作。</p>
-                  </div>
-                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">实时提交</span>
-                </div>
-              </div>
-              <div class="card-body pt-4">
-                <form class="row gy-3" method="post" action="/submit">
-                  <div class="col-12 col-lg-5">
-                    <label class="form-label" for="name">物品名称</label>
-                    <input class="form-control form-control-lg" id="name" name="name" placeholder="例如：螺丝" required>
-                  </div>
-                  <div class="col-6 col-lg-3">
-                    <label class="form-label" for="unit">单位</label>
-                    <input class="form-control form-control-lg" id="unit" name="unit" placeholder="件 / 盒 / 千克">
-                  </div>
-                  <div class="col-6 col-lg-2">
-                    <label class="form-label" for="quantity">数量</label>
-                    <input class="form-control form-control-lg" id="quantity" name="quantity" type="number" min="0" step="1" value="0" required>
-                  </div>
-                  <div class="col-12 col-lg-2">
-                    <label class="form-label" for="action">操作类型</label>
-                    <select class="form-select form-select-lg" id="action" name="action">
-                      <option value="create">新增 / 设置库存</option>
-                      <option value="in">入库</option>
-                      <option value="out">出库</option>
-                    </select>
-                  </div>
-                  <div class="col-12 text-end">
-                    <button class="btn btn-primary btn-lg px-4" type="submit">
-                      <i class="bi bi-send me-2"></i>提交操作
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </section>
-
             <section class="card shadow-sm border-0">
               <div class="card-header bg-white border-0 border-bottom">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -165,7 +124,12 @@
                     <h2 class="h5 mb-1">库存详情</h2>
                     <p class="text-muted small mb-0">查看各物品的当前库存及最近一次出入库时间。</p>
                   </div>
-                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">共 {{ items|length }} 项</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">共 {{ items|length }} 项</span>
+                    <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                      <i class="bi bi-plus-lg me-1"></i>新增
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="card-body p-0">
@@ -211,7 +175,7 @@
                   </div>
                 {% else %}
                   <div class="p-5 text-center text-muted">
-                    暂无库存记录，使用上方面板新增一个物品吧。
+                    暂无库存记录，点击右上角的「新增」按钮录入第一条库存。
                   </div>
                 {% endif %}
               </div>
@@ -249,7 +213,7 @@
               <div class="card-body">
                 <h2 class="h6 fw-semibold mb-3">快速小贴士</h2>
                 <ul class="list-unstyled mb-0 text-muted small">
-                  <li class="mb-2"><i class="bi bi-lightning-charge me-2 text-warning"></i>使用「新增 / 设置库存」可一次性录入初始数量。</li>
+                  <li class="mb-2"><i class="bi bi-lightning-charge me-2 text-warning"></i>点击库存详情中的「新增」按钮即可快速录入新 SKU。</li>
                   <li class="mb-2"><i class="bi bi-arrow-repeat me-2 text-primary"></i>所有操作实时写入文件，可供其他平台直接读取。</li>
                   <li class="mb-0"><i class="bi bi-shield-lock me-2 text-success"></i>系统自动防止负库存，出库数量超限时将被拒绝。</li>
                 </ul>
@@ -259,6 +223,57 @@
         </div>
       </div>
     </main>
+    <div class="modal fade" id="addItemModal" tabindex="-1" aria-labelledby="addItemModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="h5 modal-title" id="addItemModalLabel">新增库存</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+          </div>
+          <form method="post" action="/submit" class="needs-validation" novalidate>
+            <div class="modal-body">
+              <input type="hidden" name="action" value="create">
+              <div class="mb-3">
+                <label class="form-label" for="modal-name">物品名称</label>
+                <input class="form-control" id="modal-name" name="name" placeholder="例如：咖啡豆" required>
+                <div class="invalid-feedback">请输入物品名称。</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-12 col-sm-6">
+                  <label class="form-label" for="modal-quantity">初始数量</label>
+                  <input class="form-control" id="modal-quantity" name="quantity" type="number" min="0" step="1" value="0" required>
+                  <div class="invalid-feedback">请填写一个有效的数量。</div>
+                </div>
+                <div class="col-12 col-sm-6">
+                  <label class="form-label" for="modal-unit">单位（可选）</label>
+                  <input class="form-control" id="modal-unit" name="unit" placeholder="件 / 盒 / 千克">
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i>保存
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script>
+      (() => {
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach((form) => {
+          form.addEventListener('submit', (event) => {
+            if (!form.checkValidity()) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+          });
+        });
+      })();
+    </script>
   </body>
 </html>
