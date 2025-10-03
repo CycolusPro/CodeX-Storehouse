@@ -37,6 +37,7 @@ class InventoryItem:
 
     name: str
     quantity: int = 0
+    unit: str = ""
     last_in: Optional[datetime] = None
     last_out: Optional[datetime] = None
 
@@ -44,6 +45,7 @@ class InventoryItem:
         return {
             "name": self.name,
             "quantity": self.quantity,
+            "unit": self.unit,
             "last_in": _serialize_timestamp(self.last_in),
             "last_out": _serialize_timestamp(self.last_out),
         }
@@ -75,7 +77,7 @@ class InventoryManager:
             raise KeyError(f"Item '{name}' not found")
         return items[name]
 
-    def set_quantity(self, name: str, quantity: int) -> InventoryItem:
+    def set_quantity(self, name: str, quantity: int, unit: Optional[str] = None) -> InventoryItem:
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
         with self._lock:
@@ -83,6 +85,8 @@ class InventoryManager:
             record = self._coerce_record(data.get(name))
             previous_quantity = record["quantity"]
             record["quantity"] = quantity
+            if unit is not None:
+                record["unit"] = str(unit).strip()
             now = _now()
             if quantity > previous_quantity:
                 record["last_in"] = _serialize_timestamp(now)
@@ -114,6 +118,14 @@ class InventoryManager:
             item = self._record_to_item(name, record)
         return item
 
+    def delete_item(self, name: str) -> None:
+        with self._lock:
+            data = self._read_data()
+            if name not in data:
+                raise KeyError(f"Item '{name}' not found")
+            del data[name]
+            self._write_data(data)
+
     def _read_data(self) -> Dict[str, Any]:
         with self._lock:
             if not self.storage_path.exists():
@@ -131,14 +143,18 @@ class InventoryManager:
     def _coerce_record(raw: Any) -> Dict[str, Any]:
         if isinstance(raw, dict):
             quantity = int(raw.get("quantity", 0))
+            raw_unit = raw.get("unit", "")
+            unit = "" if raw_unit is None else str(raw_unit).strip()
             last_in = raw.get("last_in")
             last_out = raw.get("last_out")
         else:
             quantity = int(raw or 0)
+            unit = ""
             last_in = None
             last_out = None
         return {
             "quantity": quantity,
+            "unit": unit,
             "last_in": last_in,
             "last_out": last_out,
         }
@@ -148,6 +164,7 @@ class InventoryManager:
         return InventoryItem(
             name=name,
             quantity=int(record.get("quantity", 0)),
+            unit=str(record.get("unit", "") or "").strip(),
             last_in=_parse_timestamp(record.get("last_in")),
             last_out=_parse_timestamp(record.get("last_out")),
         )

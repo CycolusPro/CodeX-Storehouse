@@ -129,15 +129,19 @@
               </div>
               <div class="card-body pt-4">
                 <form class="row gy-3" method="post" action="/submit">
-                  <div class="col-12">
+                  <div class="col-12 col-lg-5">
                     <label class="form-label" for="name">物品名称</label>
                     <input class="form-control form-control-lg" id="name" name="name" placeholder="例如：螺丝" required>
                   </div>
-                  <div class="col-12 col-md-6">
+                  <div class="col-6 col-lg-3">
+                    <label class="form-label" for="unit">单位</label>
+                    <input class="form-control form-control-lg" id="unit" name="unit" placeholder="件 / 盒 / 千克">
+                  </div>
+                  <div class="col-6 col-lg-2">
                     <label class="form-label" for="quantity">数量</label>
                     <input class="form-control form-control-lg" id="quantity" name="quantity" type="number" min="0" step="1" value="0" required>
                   </div>
-                  <div class="col-12 col-md-6">
+                  <div class="col-12 col-lg-2">
                     <label class="form-label" for="action">操作类型</label>
                     <select class="form-select form-select-lg" id="action" name="action">
                       <option value="create">新增 / 设置库存</option>
@@ -166,35 +170,44 @@
               </div>
               <div class="card-body p-0">
                 {% if items %}
-                  <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                      <thead class="table-light">
-                        <tr>
-                          <th scope="col" class="ps-4">物品</th>
-                          <th scope="col" class="text-end">数量</th>
-                          <th scope="col" class="text-end">最近入库</th>
-                          <th scope="col" class="text-end">最近出库</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for item in items %}
-                          <tr>
-                            <td class="ps-4">
-                              <div class="fw-semibold">{{ item.name }}</div>
-                            </td>
-                            <td class="text-end">
-                              <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2">{{ item.quantity }}</span>
-                            </td>
-                            <td class="text-end text-nowrap">
-                              {{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}
-                            </td>
-                            <td class="text-end text-nowrap">
-                              {{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}
-                            </td>
-                          </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
+                  <div class="list-group list-group-flush">
+                    {% for item in items %}
+                      <div class="list-group-item px-4 py-4">
+                        <form class="row gy-3 align-items-center" method="post" action="/submit">
+                          <div class="col-12 col-md-4">
+                            <div class="d-flex align-items-center justify-content-between">
+                              <div>
+                                <div class="fw-semibold text-truncate" title="{{ item.name }}">{{ item.name }}</div>
+                                <div class="small text-muted">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                                <div class="small text-muted">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                              </div>
+                              <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis ms-3">
+                                {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}
+                              </span>
+                            </div>
+                          </div>
+                          <div class="col-6 col-md-2">
+                            <label class="form-label small text-muted" for="quantity-{{ loop.index }}">设置数量</label>
+                            <input class="form-control" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity }}">
+                          </div>
+                          <div class="col-6 col-md-2">
+                            <label class="form-label small text-muted" for="unit-{{ loop.index }}">单位</label>
+                            <input class="form-control" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件">
+                          </div>
+                          <div class="col-12 col-md-4 text-md-end d-flex flex-wrap justify-content-start justify-content-md-end gap-2">
+                            <input type="hidden" name="name" value="{{ item.name }}">
+                            <div class="btn-group" role="group">
+                              <button class="btn btn-outline-primary" type="submit" name="action" value="update">
+                                <i class="bi bi-save me-1"></i>保存修改
+                              </button>
+                              <button class="btn btn-outline-danger" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">
+                                <i class="bi bi-trash me-1"></i>删除
+                              </button>
+                            </div>
+                          </div>
+                        </form>
+                      </div>
+                    {% endfor %}
                   </div>
                 {% else %}
                   <div class="p-5 text-center text-muted">
