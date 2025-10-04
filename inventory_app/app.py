@@ -1,11 +1,14 @@
 """Flask application providing a minimal inventory management API and UI."""
 from __future__ import annotations
 
+import csv
+import json
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
 
 from .inventory import (
     InventoryHistoryEntry,
@@ -45,11 +48,13 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         }
         history_entries = manager.list_history(limit=20)
         timeline = _recent_activity(history_entries)
+        import_summary = _parse_import_summary(request)
         return render_template(
             "index.html",
             items=items,
             summary=summary,
             timeline=timeline,
+            import_summary=import_summary,
         )
 
     @app.get("/api/items")
@@ -134,6 +139,84 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         history_entries = manager.list_history(limit=limit)
         return jsonify([entry.to_dict() for entry in history_entries])
 
+    @app.get("/api/items/template")
+    def download_template() -> Response:
+        rows = [
+            {"name": "示例SKU", "quantity": 0, "unit": "件"},
+        ]
+        content = _rows_to_csv(["name", "quantity", "unit"], rows)
+        filename = _timestamped_filename("inventory_template")
+        return _csv_response(content, filename)
+
+    @app.get("/api/items/export")
+    def export_inventory() -> Response:
+        rows = manager.export_items()
+        fieldnames = [
+            "name",
+            "quantity",
+            "unit",
+            "created_at",
+            "last_in",
+            "last_in_delta",
+            "last_out",
+            "last_out_delta",
+        ]
+        content = _rows_to_csv(fieldnames, rows)
+        filename = _timestamped_filename("inventory_export")
+        return _csv_response(content, filename)
+
+    @app.get("/api/history/export")
+    def export_history() -> Response:
+        entries = manager.list_history()
+        rows = []
+        for entry in entries:
+            rows.append(
+                {
+                    "timestamp": entry.timestamp.astimezone().isoformat(),
+                    "action": entry.action,
+                    "name": entry.name,
+                    "details": _history_meta_to_text(entry.meta),
+                    "meta": json.dumps(entry.meta, ensure_ascii=False, sort_keys=True),
+                }
+            )
+        fieldnames = ["timestamp", "action", "name", "details", "meta"]
+        content = _rows_to_csv(fieldnames, rows)
+        filename = _timestamped_filename("inventory_history")
+        return _csv_response(content, filename)
+
+    @app.post("/api/items/import")
+    def import_inventory_api() -> Any:
+        try:
+            rows = _extract_import_rows(request)
+        except ValueError as exc:
+            return {"error": str(exc)}, 400
+        imported = manager.import_items(rows)
+        return jsonify(
+            {
+                "imported": [item.to_dict() for item in imported],
+                "count": len(imported),
+            }
+        )
+
+    @app.post("/import")
+    def import_inventory_form() -> Any:
+        upload = request.files.get("file")
+        if upload is None or upload.filename == "":
+            return redirect(url_for("index", import_error=1))
+        try:
+            rows = _extract_rows_from_filestorage(upload)
+        except ValueError:
+            return redirect(url_for("index", import_error=1))
+        total_rows = len(rows)
+        imported = manager.import_items(rows)
+        return redirect(
+            url_for(
+                "index",
+                imported=len(imported),
+                skipped=max(total_rows - len(imported), 0),
+            )
+        )
+
     @app.post("/submit")
     def submit_form() -> Any:
         action = request.form.get("action")
@@ -185,6 +268,119 @@ def _get_payload(req: Any) -> Dict[str, Any]:
     return req.get_json(silent=True) or {}
 
 
+def _rows_to_csv(fieldnames: Sequence[str], rows: Iterable[Dict[str, Any]]) -> str:
+    buffer = StringIO()
+    buffer.write("\ufeff")
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        safe_row = {}
+        for field in fieldnames:
+            value = row.get(field, "") if isinstance(row, dict) else ""
+            if value is None:
+                value = ""
+            safe_row[field] = value
+        writer.writerow(safe_row)
+    return buffer.getvalue()
+
+
+def _csv_response(content: str, filename: str) -> Response:
+    response = Response(content, mimetype="text/csv; charset=utf-8")
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}.csv"
+    return response
+
+
+def _timestamped_filename(prefix: str) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{prefix}_{timestamp}"
+
+
+def _history_meta_to_text(meta: Dict[str, Any]) -> str:
+    if not meta:
+        return ""
+    parts = []
+    for key, value in sorted(meta.items()):
+        parts.append(f"{key}: {value}")
+    return "; ".join(parts)
+
+
+def _extract_import_rows(req: Any) -> List[Dict[str, Any]]:
+    if req.files:
+        upload = req.files.get("file")
+        if upload is None or upload.filename == "":
+            raise ValueError("Missing upload file")
+        return _extract_rows_from_filestorage(upload)
+    payload = req.get_json(silent=True)
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        if isinstance(items, list):
+            return [row for row in items if isinstance(row, dict)]
+    raise ValueError("Unsupported import payload")
+
+
+def _extract_rows_from_filestorage(upload: Any) -> List[Dict[str, Any]]:
+    try:
+        raw_bytes = upload.read()
+    finally:
+        try:
+            upload.close()
+        except Exception:
+            pass
+    if not raw_bytes:
+        raise ValueError("Empty file")
+    if isinstance(raw_bytes, str):
+        text = raw_bytes
+    else:
+        try:
+            text = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValueError("File must be UTF-8 encoded") from exc
+    return _parse_csv_rows(text)
+
+
+def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
+    reader = csv.DictReader(StringIO(text))
+    if reader.fieldnames is None:
+        raise ValueError("Missing header row")
+    rows: List[Dict[str, Any]] = []
+    for row in reader:
+        if not row:
+            continue
+        normalized = { (key or "").strip().lower(): value for key, value in row.items() }
+        if not any(str(value or "").strip() for value in normalized.values()):
+            continue
+        rows.append(
+            {
+                "name": normalized.get("name", ""),
+                "quantity": normalized.get("quantity"),
+                "unit": normalized.get("unit", ""),
+            }
+        )
+    return rows
+
+
+def _parse_import_summary(req: Any) -> Optional[Dict[str, Any]]:
+    imported = req.args.get("imported")
+    skipped = req.args.get("skipped")
+    error = req.args.get("import_error")
+    if not imported and not skipped and not error:
+        return None
+    summary: Dict[str, Any] = {}
+    if imported:
+        try:
+            summary["imported"] = int(imported)
+        except ValueError:
+            summary["imported"] = imported
+    if skipped:
+        try:
+            summary["skipped"] = int(skipped)
+        except ValueError:
+            summary["skipped"] = skipped
+    if error:
+        summary["error"] = True
+    return summary
 def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> list[Dict[str, Any]]:
     def _unit_suffix(unit: str) -> str:
         return f" {unit}" if unit else ""

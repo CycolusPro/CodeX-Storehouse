@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -148,3 +149,98 @@ def test_history_api_endpoint(tmp_path: Path) -> None:
     assert payload
     assert payload[0]["name"] == "咖啡豆"
     assert "action" in payload[0]
+
+
+def test_manager_import_and_export(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    rows = [
+        {"name": "螺丝", "quantity": "5", "unit": "盒"},
+        {"name": "", "quantity": 10},
+        {"name": "垫片", "quantity": "-1"},
+        {"name": "扳手", "quantity": "abc"},
+    ]
+    imported = manager.import_items(rows)
+    assert [item.name for item in imported] == ["螺丝"]
+
+    exported = manager.export_items()
+    assert len(exported) == 1
+    record = exported[0]
+    assert record["name"] == "螺丝"
+    assert record["quantity"] == 5
+    assert record["unit"] == "盒"
+    assert "created_at" in record
+    assert "last_in" in record
+
+
+def test_import_export_endpoints(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    client = app.test_client()
+
+    response = client.post(
+        "/api/items/import",
+        json={"items": [{"name": "咖啡豆", "quantity": 5, "unit": "袋"}]},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["count"] == 1
+
+    export_resp = client.get("/api/items/export")
+    assert export_resp.status_code == 200
+    assert "inventory_export" in export_resp.headers["Content-Disposition"]
+    export_text = export_resp.data.decode("utf-8-sig")
+    assert "name,quantity,unit" in export_text.splitlines()[0]
+    assert "咖啡豆" in export_text
+
+    template_resp = client.get("/api/items/template")
+    assert template_resp.status_code == 200
+    template_text = template_resp.data.decode("utf-8-sig")
+    assert "name,quantity,unit" in template_text.splitlines()[0]
+
+
+def test_history_export_endpoint(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    client = app.test_client()
+
+    client.post("/api/items", json={"name": "咖啡豆", "quantity": 8, "unit": "袋"})
+    client.post("/api/items/咖啡豆/in", json={"quantity": 2})
+
+    export_resp = client.get("/api/history/export")
+    assert export_resp.status_code == 200
+    text = export_resp.data.decode("utf-8-sig")
+    lines = [line for line in text.splitlines() if line]
+    assert lines
+    assert "timestamp,action,name,details,meta" == lines[0]
+    assert any("咖啡豆" in line for line in lines[1:])
+
+
+def test_import_form_endpoint(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    client = app.test_client()
+
+    csv_payload = "name,quantity,unit\n茶叶,8,罐\n"
+    response = client.post(
+        "/import",
+        data={"file": (BytesIO(csv_payload.encode("utf-8")), "bulk.csv")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert "imported=1" in response.headers["Location"]
+
+    items_response = client.get("/api/items")
+    items = items_response.get_json()
+    assert any(item["name"] == "茶叶" for item in items)

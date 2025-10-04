@@ -119,20 +119,39 @@
           <div class="col-12 col-xl-8 d-flex flex-column gap-4">
             <section class="card shadow-sm border-0">
               <div class="card-header bg-white border-0 border-bottom">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                   <div>
                     <h2 class="h5 mb-1">库存详情</h2>
                     <p class="text-muted small mb-0">查看各物品的当前库存及最近一次出入库时间。</p>
                   </div>
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="d-flex flex-wrap align-items-center gap-2">
                     <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">共 {{ items|length }} 项</span>
-                    <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addItemModal">
-                      <i class="bi bi-plus-lg me-1"></i>新增
-                    </button>
+                    <div class="btn-group">
+                      <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                        <i class="bi bi-plus-lg me-1"></i>新增
+                      </button>
+                      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        批量操作
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="/api/items/template"><i class="bi bi-download me-2"></i>下载导入模板</a></li>
+                        <li><button class="dropdown-item" type="button" id="importTrigger"><i class="bi bi-upload me-2"></i>导入库存</button></li>
+                        <li><a class="dropdown-item" href="/api/items/export"><i class="bi bi-table me-2"></i>导出库存表格</a></li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
               <div class="card-body p-0">
+                {% if import_summary %}
+                  <div class="alert {% if import_summary.error %}alert-danger{% else %}alert-success{% endif %} rounded-0 mb-0">
+                    {% if import_summary.error %}
+                      导入失败，请确认文件为 UTF-8 编码的 CSV，并包含 <code>name</code>、<code>quantity</code> 字段。
+                    {% else %}
+                      已导入 <strong>{{ import_summary.imported or 0 }}</strong> 条记录{% if import_summary.skipped %}，忽略 <strong>{{ import_summary.skipped }}</strong> 条无效行{% endif %}。
+                    {% endif %}
+                  </div>
+                {% endif %}
                 {% if items %}
                   <div class="list-group list-group-flush">
                     {% for item in items %}
@@ -185,9 +204,15 @@
           <aside class="col-12 col-xl-4 d-flex flex-column gap-4">
             <section class="card shadow-sm border-0 h-100">
               <div class="card-header bg-white border-0 border-bottom">
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-activity text-primary"></i>
-                  <h2 class="h6 mb-0">最近动态</h2>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-activity text-primary"></i>
+                    <h2 class="h6 mb-0">最近动态</h2>
+                  </div>
+                  <a class="btn btn-outline-secondary btn-sm" href="/api/history/export">
+                    <i class="bi bi-table"></i>
+                    <span class="ms-1">导出记录</span>
+                  </a>
                 </div>
               </div>
               <div class="card-body">
@@ -234,6 +259,9 @@
         </div>
       </div>
     </main>
+    <form id="importForm" class="d-none" action="/import" method="post" enctype="multipart/form-data">
+      <input id="importFile" name="file" type="file" accept=".csv,text/csv">
+    </form>
     <div class="modal fade" id="addItemModal" tabindex="-1" aria-labelledby="addItemModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -284,6 +312,19 @@
             form.classList.add('was-validated');
           });
         });
+        const trigger = document.getElementById('importTrigger');
+        const fileInput = document.getElementById('importFile');
+        const importForm = document.getElementById('importForm');
+        if (trigger && fileInput && importForm) {
+          trigger.addEventListener('click', () => {
+            fileInput.click();
+          });
+          fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+              importForm.submit();
+            }
+          });
+        }
       })();
     </script>
   </body>

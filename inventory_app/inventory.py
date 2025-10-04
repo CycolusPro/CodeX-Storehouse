@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 import json
 
 
@@ -283,6 +283,54 @@ class InventoryManager:
         if limit is not None and limit >= 0:
             return entries[:limit]
         return entries
+
+    def import_items(self, rows: Iterable[Dict[str, Any]]) -> List[InventoryItem]:
+        """Bulk import items from iterable rows.
+
+        Each row should provide ``name`` and ``quantity`` fields and may include
+        ``unit``. Invalid rows are ignored. The method returns the list of
+        imported/updated items in the order they were successfully applied.
+        """
+
+        imported: List[InventoryItem] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            quantity_raw = row.get("quantity")
+            try:
+                quantity = int(quantity_raw)
+            except (TypeError, ValueError):
+                continue
+            if quantity < 0:
+                continue
+            unit_value = row.get("unit")
+            unit = None if unit_value is None else str(unit_value).strip()
+            item = self.set_quantity(name, quantity, unit=unit)
+            imported.append(item)
+        return imported
+
+    def export_items(self) -> List[Dict[str, Any]]:
+        """Return inventory data formatted for tabular export."""
+
+        records: List[Dict[str, Any]] = []
+        items = sorted(self.list_items().values(), key=lambda item: item.name)
+        for item in items:
+            records.append(
+                {
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "created_at": _serialize_timestamp(item.created_at),
+                    "last_in": _serialize_timestamp(item.last_in),
+                    "last_in_delta": item.last_in_delta,
+                    "last_out": _serialize_timestamp(item.last_out),
+                    "last_out_delta": item.last_out_delta,
+                }
+            )
+        return records
 
     def _read_data(self) -> Dict[str, Any]:
         with self._lock:
