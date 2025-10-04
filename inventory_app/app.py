@@ -159,24 +159,53 @@ def _get_payload(req: Any) -> Dict[str, Any]:
 
 
 def _recent_activity(items: list[InventoryItem], limit: int = 5) -> list[Dict[str, Any]]:
+    def _unit_suffix(unit: str) -> str:
+        return f" {unit}" if unit else ""
+
     events: list[Dict[str, Any]] = []
     for item in items:
+        suffix = _unit_suffix(item.unit)
+        if item.created_at is not None:
+            initial_quantity = (
+                item.created_quantity
+                if item.created_quantity is not None
+                else item.quantity
+            )
+            events.append(
+                {
+                    "type": "新增",
+                    "timestamp": item.created_at,
+                    "name": item.name,
+                    "badge": "info",
+                    "details": f"初始数量 {initial_quantity}{suffix}".strip(),
+                }
+            )
         if item.last_in is not None:
+            if item.last_in_delta is not None:
+                details = f"数量 +{item.last_in_delta}{suffix}".strip()
+            else:
+                details = "完成入库调整"
             events.append(
                 {
                     "type": "入库",
                     "timestamp": item.last_in,
                     "name": item.name,
                     "badge": "success",
+                    "details": details,
                 }
             )
         if item.last_out is not None:
+            if item.last_out_delta is not None:
+                details = f"数量 -{item.last_out_delta}{suffix}".strip()
+            else:
+                details = "完成出库调整"
             events.append(
                 {
                     "type": "出库",
                     "timestamp": item.last_out,
                     "name": item.name,
                     "badge": "warning",
+                    "details": details,
                 }
             )
     events.sort(key=lambda event: event["timestamp"], reverse=True)

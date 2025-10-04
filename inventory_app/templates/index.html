@@ -194,11 +194,14 @@
                 {% if timeline %}
                   <ul class="list-group list-group-flush">
                     {% for event in timeline %}
-                      <li class="list-group-item px-0 d-flex align-items-center gap-3">
-                        <span class="badge rounded-pill text-bg-{{ event.badge }} px-3 py-2">{{ event.type }}</span>
+                      <li class="list-group-item px-0 d-flex align-items-start gap-3">
+                        <span class="badge rounded-pill text-bg-{{ event.badge }} px-3 py-2 mt-1">{{ event.type }}</span>
                         <div class="flex-grow-1">
                           <div class="fw-semibold">{{ event.name }}</div>
                           <div class="small text-muted">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                          {% if event.details %}
+                            <div class="small text-secondary mt-1">{{ event.details }}</div>
+                          {% endif %}
                         </div>
                       </li>
                     {% endfor %}

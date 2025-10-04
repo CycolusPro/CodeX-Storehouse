@@ -14,12 +14,18 @@ def test_set_and_get(tmp_path: Path) -> None:
     assert item.unit == "盒"
     assert item.last_in is not None
     assert item.last_out is None
+    assert item.created_at is not None
+    assert item.created_quantity == 10
+    assert item.last_in_delta == 10
 
     fetched = manager.get_item("螺丝")
     assert fetched.quantity == 10
     assert fetched.unit == "盒"
     assert fetched.last_in is not None
     assert fetched.last_out is None
+    assert fetched.created_at is not None
+    assert fetched.created_quantity == 10
+    assert fetched.last_in_delta == 10
 
 
 def test_adjust_quantity(tmp_path: Path) -> None:
@@ -32,12 +38,14 @@ def test_adjust_quantity(tmp_path: Path) -> None:
     assert after_in.quantity == 10
     assert after_in.unit == "件"
     assert after_in.last_in is not None
+    assert after_in.last_in_delta == 5
 
     manager.adjust_quantity("螺丝", -3)
     after_out = manager.get_item("螺丝")
     assert after_out.quantity == 7
     assert after_out.unit == "件"
     assert after_out.last_out is not None
+    assert after_out.last_out_delta == 3
 
 
 def test_adjust_quantity_rejects_negative(tmp_path: Path) -> None:
@@ -61,6 +69,10 @@ def test_serialization_contains_timestamps(tmp_path: Path) -> None:
     assert payload["last_in"] is not None
     assert isinstance(payload["last_in"], str)
     assert payload["last_out"] is None
+    assert payload["created_at"] is not None
+    assert payload["created_quantity"] == 4
+    assert payload["last_in_delta"] == 4
+    assert payload["last_out_delta"] is None
 
 
 def test_delete_item(tmp_path: Path) -> None:

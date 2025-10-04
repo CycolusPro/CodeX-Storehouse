@@ -40,6 +40,10 @@ class InventoryItem:
     unit: str = ""
     last_in: Optional[datetime] = None
     last_out: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    created_quantity: Optional[int] = None
+    last_in_delta: Optional[int] = None
+    last_out_delta: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -48,6 +52,10 @@ class InventoryItem:
             "unit": self.unit,
             "last_in": _serialize_timestamp(self.last_in),
             "last_out": _serialize_timestamp(self.last_out),
+            "created_at": _serialize_timestamp(self.created_at),
+            "created_quantity": self.created_quantity,
+            "last_in_delta": self.last_in_delta,
+            "last_out_delta": self.last_out_delta,
         }
 
 
@@ -82,16 +90,22 @@ class InventoryManager:
             raise ValueError("Quantity cannot be negative")
         with self._lock:
             data = self._read_data()
+            is_new = name not in data
             record = self._coerce_record(data.get(name))
             previous_quantity = record["quantity"]
             record["quantity"] = quantity
             if unit is not None:
                 record["unit"] = str(unit).strip()
             now = _now()
+            if is_new:
+                record["created_at"] = _serialize_timestamp(now)
+                record["created_quantity"] = quantity
             if quantity > previous_quantity:
                 record["last_in"] = _serialize_timestamp(now)
+                record["last_in_delta"] = quantity - previous_quantity
             elif quantity < previous_quantity:
                 record["last_out"] = _serialize_timestamp(now)
+                record["last_out_delta"] = previous_quantity - quantity
             elif quantity > 0 and record["last_in"] is None and record["last_out"] is None:
                 record["last_in"] = _serialize_timestamp(now)
             data[name] = record
@@ -111,8 +125,10 @@ class InventoryManager:
             now = _now()
             if delta > 0:
                 record["last_in"] = _serialize_timestamp(now)
+                record["last_in_delta"] = delta
             elif delta < 0:
                 record["last_out"] = _serialize_timestamp(now)
+                record["last_out_delta"] = abs(delta)
             data[name] = record
             self._write_data(data)
             item = self._record_to_item(name, record)
@@ -147,16 +163,52 @@ class InventoryManager:
             unit = "" if raw_unit is None else str(raw_unit).strip()
             last_in = raw.get("last_in")
             last_out = raw.get("last_out")
+            created_at = raw.get("created_at")
+            created_quantity = raw.get("created_quantity")
+            last_in_delta = raw.get("last_in_delta")
+            last_out_delta = raw.get("last_out_delta")
         else:
             quantity = int(raw or 0)
             unit = ""
             last_in = None
             last_out = None
+            created_at = None
+            created_quantity = quantity
+            last_in_delta = None
+            last_out_delta = None
+        try:
+            created_quantity_int: Optional[int]
+            if created_quantity is None:
+                created_quantity_int = None
+            else:
+                created_quantity_int = int(created_quantity)
+        except (TypeError, ValueError):
+            created_quantity_int = None
+        try:
+            last_in_delta_int: Optional[int]
+            if last_in_delta is None:
+                last_in_delta_int = None
+            else:
+                last_in_delta_int = abs(int(last_in_delta))
+        except (TypeError, ValueError):
+            last_in_delta_int = None
+        try:
+            last_out_delta_int: Optional[int]
+            if last_out_delta is None:
+                last_out_delta_int = None
+            else:
+                last_out_delta_int = abs(int(last_out_delta))
+        except (TypeError, ValueError):
+            last_out_delta_int = None
         return {
             "quantity": quantity,
             "unit": unit,
             "last_in": last_in,
             "last_out": last_out,
+            "created_at": created_at,
+            "created_quantity": created_quantity_int,
+            "last_in_delta": last_in_delta_int,
+            "last_out_delta": last_out_delta_int,
         }
 
     @staticmethod
@@ -167,4 +219,16 @@ class InventoryManager:
             unit=str(record.get("unit", "") or "").strip(),
             last_in=_parse_timestamp(record.get("last_in")),
             last_out=_parse_timestamp(record.get("last_out")),
+            created_at=_parse_timestamp(record.get("created_at")),
+            created_quantity=(
+                None
+                if record.get("created_quantity") is None
+                else int(record.get("created_quantity"))
+            ),
+            last_in_delta=(
+                None if record.get("last_in_delta") is None else int(record.get("last_in_delta"))
+            ),
+            last_out_delta=(
+                None if record.get("last_out_delta") is None else int(record.get("last_out_delta"))
+            ),
         )
