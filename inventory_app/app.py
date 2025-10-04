@@ -46,8 +46,8 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             "latest_in": latest_in,
             "latest_out": latest_out,
         }
-        history_entries = manager.list_history(limit=20)
-        timeline = _recent_activity(history_entries)
+        history_entries = manager.list_history(limit=5)
+        timeline = _recent_activity(history_entries, limit=5)
         import_summary = _parse_import_summary(request)
         return render_template(
             "index.html",
