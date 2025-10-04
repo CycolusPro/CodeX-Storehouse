@@ -200,7 +200,15 @@
                           <div class="fw-semibold">{{ event.name }}</div>
                           <div class="small text-muted">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</div>
                           {% if event.details %}
-                            <div class="small text-secondary mt-1">{{ event.details }}</div>
+                            {% if event.details is string %}
+                              <div class="small text-secondary mt-1">{{ event.details }}</div>
+                            {% else %}
+                              <ul class="small text-secondary mt-2 ps-3 mb-0">
+                                {% for detail in event.details %}
+                                  <li>{{ detail }}</li>
+                                {% endfor %}
+                              </ul>
+                            {% endif %}
                           {% endif %}
                         </div>
                       </li>

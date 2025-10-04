@@ -3,11 +3,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
-from .inventory import InventoryItem, InventoryManager
+from .inventory import (
+    InventoryHistoryEntry,
+    InventoryItem,
+    InventoryManager,
+)
 
 
 def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
@@ -39,8 +43,14 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             "latest_in": latest_in,
             "latest_out": latest_out,
         }
-        timeline = _recent_activity(items)
-        return render_template("index.html", items=items, summary=summary, timeline=timeline)
+        history_entries = manager.list_history(limit=20)
+        timeline = _recent_activity(history_entries)
+        return render_template(
+            "index.html",
+            items=items,
+            summary=summary,
+            timeline=timeline,
+        )
 
     @app.get("/api/items")
     def list_items() -> Any:
@@ -107,6 +117,23 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             return {"error": str(exc)}, 404
         return "", 204
 
+    @app.get("/api/history")
+    def list_history() -> Any:
+        limit_raw = request.args.get("limit")
+        limit: Optional[int]
+        if limit_raw is None or limit_raw == "":
+            limit = None
+        else:
+            try:
+                limit_value = int(limit_raw)
+            except (TypeError, ValueError):
+                return {"error": "Invalid limit"}, 400
+            if limit_value < 0:
+                return {"error": "Invalid limit"}, 400
+            limit = limit_value
+        history_entries = manager.list_history(limit=limit)
+        return jsonify([entry.to_dict() for entry in history_entries])
+
     @app.post("/submit")
     def submit_form() -> Any:
         action = request.form.get("action")
@@ -158,56 +185,82 @@ def _get_payload(req: Any) -> Dict[str, Any]:
     return req.get_json(silent=True) or {}
 
 
-def _recent_activity(items: list[InventoryItem], limit: int = 5) -> list[Dict[str, Any]]:
+def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> list[Dict[str, Any]]:
     def _unit_suffix(unit: str) -> str:
         return f" {unit}" if unit else ""
 
     events: list[Dict[str, Any]] = []
-    for item in items:
-        suffix = _unit_suffix(item.unit)
-        if item.created_at is not None:
-            initial_quantity = (
-                item.created_quantity
-                if item.created_quantity is not None
-                else item.quantity
-            )
-            events.append(
-                {
-                    "type": "新增",
-                    "timestamp": item.created_at,
-                    "name": item.name,
-                    "badge": "info",
-                    "details": f"初始数量 {initial_quantity}{suffix}".strip(),
-                }
-            )
-        if item.last_in is not None:
-            if item.last_in_delta is not None:
-                details = f"数量 +{item.last_in_delta}{suffix}".strip()
-            else:
-                details = "完成入库调整"
-            events.append(
-                {
-                    "type": "入库",
-                    "timestamp": item.last_in,
-                    "name": item.name,
-                    "badge": "success",
-                    "details": details,
-                }
-            )
-        if item.last_out is not None:
-            if item.last_out_delta is not None:
-                details = f"数量 -{item.last_out_delta}{suffix}".strip()
-            else:
-                details = "完成出库调整"
-            events.append(
-                {
-                    "type": "出库",
-                    "timestamp": item.last_out,
-                    "name": item.name,
-                    "badge": "warning",
-                    "details": details,
-                }
-            )
+    for entry in entries:
+        meta = entry.meta
+        unit = str(meta.get("unit") or "")
+        suffix = _unit_suffix(unit)
+        badge = "secondary"
+        label = "动态"
+        details: List[str] = []
+
+        if entry.action == "create":
+            badge = "info"
+            label = "新增"
+            quantity = meta.get("quantity")
+            if quantity is not None:
+                details.append(f"初始数量 {quantity}{suffix}".strip())
+            if unit:
+                details.append(f"单位：{unit}")
+        elif entry.action == "set":
+            badge = "primary"
+            label = "盘点"
+            new_quantity = meta.get("new_quantity")
+            previous_quantity = meta.get("previous_quantity")
+            delta = meta.get("delta")
+            if new_quantity is not None and previous_quantity is not None:
+                details.append(
+                    f"库存 {previous_quantity}{suffix} → {new_quantity}{suffix}".strip()
+                )
+            elif new_quantity is not None:
+                details.append(f"库存调整至 {new_quantity}{suffix}".strip())
+            if delta:
+                sign = "+" if delta > 0 else ""
+                details.append(f"差值 {sign}{delta}")
+            previous_unit = meta.get("previous_unit")
+            if previous_unit and previous_unit != unit:
+                details.append(f"单位 {previous_unit} → {unit or '（空）'}")
+        elif entry.action == "in":
+            badge = "success"
+            label = "入库"
+            delta = meta.get("delta")
+            new_quantity = meta.get("new_quantity")
+            if delta is not None:
+                details.append(f"数量 +{delta}{suffix}".strip())
+            if new_quantity is not None:
+                details.append(f"现有库存 {new_quantity}{suffix}".strip())
+        elif entry.action == "out":
+            badge = "warning"
+            label = "出库"
+            delta = meta.get("delta")
+            new_quantity = meta.get("new_quantity")
+            if delta is not None:
+                details.append(f"数量 -{delta}{suffix}".strip())
+            if new_quantity is not None:
+                details.append(f"现有库存 {new_quantity}{suffix}".strip())
+        elif entry.action == "delete":
+            badge = "danger"
+            label = "删除"
+            previous_quantity = meta.get("previous_quantity")
+            if previous_quantity is not None:
+                details.append(f"移除前库存 {previous_quantity}{suffix}".strip())
+            if unit:
+                details.append(f"单位：{unit}")
+
+        events.append(
+            {
+                "type": label,
+                "timestamp": entry.timestamp,
+                "name": entry.name,
+                "badge": badge,
+                "details": details,
+            }
+        )
+
     events.sort(key=lambda event: event["timestamp"], reverse=True)
     return events[:limit]
 
