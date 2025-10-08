@@ -10,7 +10,7 @@ def test_set_and_get(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
 
-    item = manager.set_quantity("螺丝", 10, unit="盒")
+    item = manager.set_quantity("螺丝", 10, unit="盒", threshold=3)
     assert item.quantity == 10
     assert item.unit == "盒"
     assert item.last_in is not None
@@ -18,6 +18,7 @@ def test_set_and_get(tmp_path: Path) -> None:
     assert item.created_at is not None
     assert item.created_quantity == 10
     assert item.last_in_delta == 10
+    assert item.threshold == 3
 
     fetched = manager.get_item("螺丝")
     assert fetched.quantity == 10
@@ -27,19 +28,21 @@ def test_set_and_get(tmp_path: Path) -> None:
     assert fetched.created_at is not None
     assert fetched.created_quantity == 10
     assert fetched.last_in_delta == 10
+    assert fetched.threshold == 3
 
 
 def test_adjust_quantity(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
 
-    manager.set_quantity("螺丝", 5, unit="件")
+    manager.set_quantity("螺丝", 5, unit="件", threshold=2)
     manager.adjust_quantity("螺丝", 5)
     after_in = manager.get_item("螺丝")
     assert after_in.quantity == 10
     assert after_in.unit == "件"
     assert after_in.last_in is not None
     assert after_in.last_in_delta == 5
+    assert after_in.threshold == 2
 
     manager.adjust_quantity("螺丝", -3)
     after_out = manager.get_item("螺丝")
@@ -47,6 +50,7 @@ def test_adjust_quantity(tmp_path: Path) -> None:
     assert after_out.unit == "件"
     assert after_out.last_out is not None
     assert after_out.last_out_delta == 3
+    assert after_out.threshold == 2
 
 
 def test_adjust_quantity_rejects_negative(tmp_path: Path) -> None:
@@ -58,11 +62,25 @@ def test_adjust_quantity_rejects_negative(tmp_path: Path) -> None:
         manager.adjust_quantity("螺丝", -3)
 
 
+def test_set_quantity_threshold_preservation(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    manager.set_quantity("面粉", 8, threshold=3)
+    manager.set_quantity("面粉", 10, keep_threshold=True)
+    item = manager.get_item("面粉")
+    assert item.threshold == 3
+
+    manager.set_quantity("面粉", 6, threshold=None)
+    updated = manager.get_item("面粉")
+    assert updated.threshold is None
+
+
 def test_serialization_contains_timestamps(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
 
-    item = manager.set_quantity("垫片", 4, unit="包")
+    item = manager.set_quantity("垫片", 4, unit="包", threshold=1)
     payload = item.to_dict()
 
     assert payload["quantity"] == 4
@@ -74,6 +92,7 @@ def test_serialization_contains_timestamps(tmp_path: Path) -> None:
     assert payload["created_quantity"] == 4
     assert payload["last_in_delta"] == 4
     assert payload["last_out_delta"] is None
+    assert payload["threshold"] == 1
 
 
 def test_delete_item(tmp_path: Path) -> None:
@@ -136,9 +155,11 @@ def test_history_api_endpoint(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/items",
-        json={"name": "咖啡豆", "quantity": 8, "unit": "袋"},
+        json={"name": "咖啡豆", "quantity": 8, "unit": "袋", "threshold": 3},
     )
     assert response.status_code == 201
+    created_payload = response.get_json()
+    assert created_payload["threshold"] == 3
 
     client.post("/api/items/咖啡豆/in", json={"quantity": 2})
 
@@ -156,13 +177,14 @@ def test_manager_import_and_export(tmp_path: Path) -> None:
     manager = InventoryManager(storage)
 
     rows = [
-        {"name": "螺丝", "quantity": "5", "unit": "盒"},
+        {"name": "螺丝", "quantity": "5", "unit": "盒", "threshold": "2"},
         {"name": "", "quantity": 10},
         {"name": "垫片", "quantity": "-1"},
         {"name": "扳手", "quantity": "abc"},
     ]
     imported = manager.import_items(rows)
     assert [item.name for item in imported] == ["螺丝"]
+    assert imported[0].threshold == 2
 
     exported = manager.export_items()
     assert len(exported) == 1
@@ -172,6 +194,7 @@ def test_manager_import_and_export(tmp_path: Path) -> None:
     assert record["unit"] == "盒"
     assert "created_at" in record
     assert "last_in" in record
+    assert record["threshold"] == 2
 
 
 def test_import_export_endpoints(tmp_path: Path) -> None:
@@ -184,7 +207,7 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/items/import",
-        json={"items": [{"name": "咖啡豆", "quantity": 5, "unit": "袋"}]},
+        json={"items": [{"name": "咖啡豆", "quantity": 5, "unit": "袋", "threshold": 2}]},
     )
     assert response.status_code == 200
     payload = response.get_json()
@@ -194,13 +217,14 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     assert export_resp.status_code == 200
     assert "inventory_export" in export_resp.headers["Content-Disposition"]
     export_text = export_resp.data.decode("utf-8-sig")
-    assert "name,quantity,unit" in export_text.splitlines()[0]
+    header = export_text.splitlines()[0]
+    assert "name" in header and "threshold" in header
     assert "咖啡豆" in export_text
 
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200
     template_text = template_resp.data.decode("utf-8-sig")
-    assert "name,quantity,unit" in template_text.splitlines()[0]
+    assert "名称,数量,单位,阈值提醒" == template_text.splitlines()[0]
 
 
 def test_history_export_endpoint(tmp_path: Path) -> None:
@@ -231,7 +255,7 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
     app = create_app(storage)
     client = app.test_client()
 
-    csv_payload = "name,quantity,unit\n茶叶,8,罐\n"
+    csv_payload = "名称,数量,单位,阈值提醒\n茶叶,8,罐,3\n"
     response = client.post(
         "/import",
         data={"file": (BytesIO(csv_payload.encode("utf-8")), "bulk.csv")},
@@ -243,4 +267,4 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
 
     items_response = client.get("/api/items")
     items = items_response.get_json()
-    assert any(item["name"] == "茶叶" for item in items)
+    assert any(item["name"] == "茶叶" and item.get("threshold") == 3 for item in items)

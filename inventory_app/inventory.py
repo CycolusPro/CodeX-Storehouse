@@ -31,6 +31,29 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _normalize_threshold(value: Any) -> Optional[int]:
+    """Convert threshold inputs to non-negative integers or ``None``."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value.strip() == "":
+            return None
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            return None
+        threshold_int = parsed
+    else:
+        try:
+            threshold_int = int(value)
+        except (TypeError, ValueError):
+            return None
+    if threshold_int < 0:
+        return None
+    return threshold_int
+
+
 @dataclass
 class InventoryItem:
     """Represents a single inventory item."""
@@ -44,6 +67,7 @@ class InventoryItem:
     created_quantity: Optional[int] = None
     last_in_delta: Optional[int] = None
     last_out_delta: Optional[int] = None
+    threshold: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,6 +80,7 @@ class InventoryItem:
             "created_quantity": self.created_quantity,
             "last_in_delta": self.last_in_delta,
             "last_out_delta": self.last_out_delta,
+            "threshold": self.threshold,
         }
 
 
@@ -128,7 +153,15 @@ class InventoryManager:
             raise KeyError(f"Item '{name}' not found")
         return items[name]
 
-    def set_quantity(self, name: str, quantity: int, unit: Optional[str] = None) -> InventoryItem:
+    def set_quantity(
+        self,
+        name: str,
+        quantity: int,
+        unit: Optional[str] = None,
+        threshold: Optional[int] = None,
+        *,
+        keep_threshold: bool = False,
+    ) -> InventoryItem:
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
         with self._lock:
@@ -140,11 +173,15 @@ class InventoryManager:
             record["quantity"] = quantity
             if unit is not None:
                 record["unit"] = str(unit).strip()
+            if not keep_threshold:
+                record["threshold"] = _normalize_threshold(threshold)
             new_unit = record.get("unit", "")
             now = _now()
             if is_new:
                 record["created_at"] = _serialize_timestamp(now)
                 record["created_quantity"] = quantity
+                if keep_threshold:
+                    record.setdefault("threshold", _normalize_threshold(threshold))
             if quantity > previous_quantity:
                 record["last_in"] = _serialize_timestamp(now)
                 record["last_in_delta"] = quantity - previous_quantity
@@ -308,7 +345,22 @@ class InventoryManager:
                 continue
             unit_value = row.get("unit")
             unit = None if unit_value is None else str(unit_value).strip()
-            item = self.set_quantity(name, quantity, unit=unit)
+            threshold_raw = None
+            threshold_field_present = False
+            if isinstance(row, dict):
+                for key in ("threshold", "阈值提醒", "阈值"):
+                    if key in row:
+                        threshold_raw = row.get(key)
+                        threshold_field_present = True
+                        break
+            threshold = _normalize_threshold(threshold_raw)
+            item = self.set_quantity(
+                name,
+                quantity,
+                unit=unit,
+                threshold=threshold,
+                keep_threshold=not threshold_field_present,
+            )
             imported.append(item)
         return imported
 
@@ -328,6 +380,7 @@ class InventoryManager:
                     "last_in_delta": item.last_in_delta,
                     "last_out": _serialize_timestamp(item.last_out),
                     "last_out_delta": item.last_out_delta,
+                    "threshold": item.threshold,
                 }
             )
         return records
@@ -365,6 +418,7 @@ class InventoryManager:
             created_quantity = raw.get("created_quantity")
             last_in_delta = raw.get("last_in_delta")
             last_out_delta = raw.get("last_out_delta")
+            threshold_value = _normalize_threshold(raw.get("threshold"))
         else:
             quantity = int(raw or 0)
             unit = ""
@@ -374,6 +428,7 @@ class InventoryManager:
             created_quantity = quantity
             last_in_delta = None
             last_out_delta = None
+            threshold_value = None
         try:
             created_quantity_int: Optional[int]
             if created_quantity is None:
@@ -407,6 +462,7 @@ class InventoryManager:
             "created_quantity": created_quantity_int,
             "last_in_delta": last_in_delta_int,
             "last_out_delta": last_out_delta_int,
+            "threshold": threshold_value,
         }
 
     @staticmethod
@@ -429,4 +485,5 @@ class InventoryManager:
             last_out_delta=(
                 None if record.get("last_out_delta") is None else int(record.get("last_out_delta"))
             ),
+            threshold=_normalize_threshold(record.get("threshold")),
         )
