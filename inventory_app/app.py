@@ -44,6 +44,7 @@ _CSV_FIELD_ALIASES: Dict[str, set[str]] = {
     "quantity": {"quantity", "数量"},
     "unit": {"unit", "单位"},
     "threshold": {"threshold", "阈值提醒", "阈值"},
+    "category": {"category", "分类", "库存分类"},
 }
 
 _CSV_FIELD_ALIASES_NORMALIZED: Dict[str, set[str]] = {
@@ -117,7 +118,39 @@ def create_app(
             "can_manage_users": is_super_admin,
             "can_view_history": can_manage_items,
             "can_clear_history": is_super_admin,
+            "can_manage_stores": is_super_admin,
+            "can_manage_categories": role in {"admin", "super_admin"},
         }
+
+    def _list_stores() -> Dict[str, Dict[str, Any]]:
+        return manager.list_stores()
+
+    def _list_categories() -> Dict[str, Dict[str, Any]]:
+        return manager.list_categories()
+
+    def _resolve_store_id(store_id: Optional[str] = None) -> str:
+        stores = _list_stores()
+        if store_id and store_id in stores:
+            session["store_id"] = store_id
+            return store_id
+        selected = session.get("store_id")
+        if selected in stores:
+            return selected
+        if stores:
+            first = next(iter(stores))
+            session["store_id"] = first
+            return first
+        created = manager.create_store("默认门店")
+        session["store_id"] = created["id"]
+        return created["id"]
+
+    def _resolve_category_id(category_id: Optional[str]) -> Optional[str]:
+        if not category_id:
+            return None
+        categories = _list_categories()
+        if category_id in categories:
+            return category_id
+        return None
 
     def _is_api_request() -> bool:
         if request.path.startswith("/api/"):
@@ -214,6 +247,113 @@ def create_app(
         session.pop("user", None)
         return redirect(url_for("login"))
 
+    @app.post("/stores/select")
+    @login_required
+    def select_store() -> Any:
+        payload = _get_payload(request)
+        target = (
+            payload.get("store_id")
+            if isinstance(payload, Mapping)
+            else None
+        )
+        if not target:
+            target = request.form.get("store_id") or request.args.get("store_id")
+        stores = _list_stores()
+        if target in stores:
+            session["store_id"] = target
+            if request.is_json:
+                return jsonify({"store_id": target})
+            return redirect(url_for("index"))
+        if request.is_json:
+            return jsonify({"error": "指定门店不存在"}), 404
+        return redirect(url_for("index"))
+
+    @app.post("/stores")
+    @role_required("super_admin")
+    def create_store_route() -> Any:
+        payload = _get_payload(request)
+        name = str(payload.get("name") or request.form.get("name") or "").strip()
+        try:
+            created = manager.create_store(name)
+        except ValueError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 400
+            flash(str(exc), "error")
+            return redirect(url_for("index"))
+        if request.is_json:
+            return jsonify(created), 201
+        flash("已新增门店", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/stores/<string:store_id>/delete")
+    @role_required("super_admin")
+    def delete_store_route(store_id: str) -> Any:
+        payload = _get_payload(request)
+        cascade_value = payload.get("cascade") if isinstance(payload, Mapping) else None
+        if cascade_value is None:
+            cascade_value = request.form.get("cascade") or request.args.get("cascade")
+        cascade = str(cascade_value).lower() in {"1", "true", "yes", "on"}
+        try:
+            manager.delete_store(store_id, cascade=cascade, user=_current_username())
+        except ValueError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 400
+            flash(str(exc), "error")
+            return redirect(url_for("index"))
+        except KeyError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 404
+            flash("门店不存在", "error")
+            return redirect(url_for("index"))
+        if session.get("store_id") == store_id:
+            session.pop("store_id", None)
+        if request.is_json:
+            return "", 204
+        flash("已删除门店", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/categories")
+    @role_required("admin", "super_admin")
+    def create_category_route() -> Any:
+        payload = _get_payload(request)
+        name = str(payload.get("name") or request.form.get("name") or "").strip()
+        try:
+            created = manager.create_category(name)
+        except ValueError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 400
+            flash(str(exc), "error")
+            return redirect(url_for("index"))
+        if request.is_json:
+            return jsonify(created), 201
+        flash("已新增分类", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/categories/<string:category_id>/delete")
+    @role_required("admin", "super_admin")
+    def delete_category_route(category_id: str) -> Any:
+        payload = _get_payload(request)
+        cascade_value = payload.get("cascade") if isinstance(payload, Mapping) else None
+        if cascade_value is None:
+            cascade_value = request.form.get("cascade") or request.args.get("cascade")
+        cascade = str(cascade_value).lower() in {"1", "true", "yes", "on"}
+        try:
+            manager.delete_category(category_id, cascade=cascade, user=_current_username())
+        except ValueError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 400
+            flash(str(exc), "error")
+            return redirect(url_for("index"))
+        except KeyError as exc:
+            if request.is_json:
+                return {"error": str(exc)}, 404
+            flash("分类不存在", "error")
+            return redirect(url_for("index"))
+        if request.is_json:
+            return "", 204
+        flash("已删除分类", "success")
+        return redirect(url_for("index"))
+
     def _format_datetime(value: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M") -> str:
         if value is None:
             return "—"
@@ -230,7 +370,16 @@ def create_app(
     @app.get("/")
     @login_required
     def index() -> str:
-        items = sorted(manager.list_items().values(), key=lambda item: item.name)
+        selected_store = _resolve_store_id(request.args.get("store"))
+        selected_category = _resolve_category_id(request.args.get("category"))
+        stores = _list_stores()
+        categories = _list_categories()
+        items = sorted(
+            manager.list_items(
+                store_id=selected_store, category_id=selected_category
+            ).values(),
+            key=lambda item: item.name,
+        )
         total_quantity = sum(item.quantity for item in items)
         latest_in = _latest_timestamp(items, key="last_in")
         latest_out = _latest_timestamp(items, key="last_out")
@@ -240,7 +389,7 @@ def create_app(
             "latest_in": latest_in,
             "latest_out": latest_out,
         }
-        history_entries = manager.list_history(limit=5)
+        history_entries = manager.list_history(store_id=selected_store, limit=5)
         timeline = _recent_activity(history_entries, limit=5)
         import_summary = _parse_import_summary(request)
         low_stock_items = [
@@ -253,6 +402,10 @@ def create_app(
             timeline=timeline,
             import_summary=import_summary,
             low_stock_items=low_stock_items,
+            stores=stores,
+            categories=categories,
+            selected_store=selected_store,
+            selected_category=selected_category,
         )
 
     @app.post("/history/clear")
@@ -265,7 +418,9 @@ def create_app(
     @app.get("/api/items")
     @login_required
     def list_items() -> Any:
-        items = manager.list_items()
+        store_id = _resolve_store_id(request.args.get("store_id"))
+        category_id = _resolve_category_id(request.args.get("category_id"))
+        items = manager.list_items(store_id=store_id, category_id=category_id)
         return jsonify([item.to_dict() for item in items.values()])
 
     @app.post("/api/items")
@@ -278,8 +433,16 @@ def create_app(
             return {"error": "Missing item name"}, 400
         unit = str(payload.get("unit", "") or "").strip()
         threshold = _parse_threshold_value(payload.get("threshold"))
+        store_id = _resolve_store_id(payload.get("store_id"))
+        category_id = payload.get("category")
         item = manager.set_quantity(
-            name, quantity, unit=unit, threshold=threshold, user=_current_username()
+            name,
+            quantity,
+            unit=unit,
+            threshold=threshold,
+            store_id=store_id,
+            category=category_id,
+            user=_current_username(),
         )
         return jsonify(item.to_dict()), 201
 
@@ -296,8 +459,10 @@ def create_app(
         unit = payload.get("unit")
         threshold_provided = "threshold" in payload
         threshold = _parse_threshold_value(payload.get("threshold"))
+        store_id = _resolve_store_id(payload.get("store_id"))
+        category_id = payload.get("category")
         try:
-            manager.get_item(name)
+            manager.get_item(name, store_id=store_id)
         except KeyError as exc:
             return {"error": str(exc)}, 404
         try:
@@ -307,6 +472,8 @@ def create_app(
                 unit=str(unit).strip() if unit is not None else None,
                 threshold=threshold,
                 keep_threshold=not threshold_provided,
+                category=category_id,
+                store_id=store_id,
                 user=_current_username(),
             )
         except ValueError as exc:
@@ -320,7 +487,10 @@ def create_app(
         delta = int(payload.get("quantity", 0))
         if delta <= 0:
             return {"error": "Quantity must be greater than zero"}, 400
-        item = manager.adjust_quantity(name, delta, user=_current_username())
+        store_id = _resolve_store_id(payload.get("store_id"))
+        item = manager.adjust_quantity(
+            name, delta, store_id=store_id, user=_current_username()
+        )
         return jsonify(item.to_dict())
 
     @app.post("/api/items/<string:name>/out")
@@ -330,8 +500,11 @@ def create_app(
         delta = int(payload.get("quantity", 0))
         if delta <= 0:
             return {"error": "Quantity must be greater than zero"}, 400
+        store_id = _resolve_store_id(payload.get("store_id"))
         try:
-            item = manager.adjust_quantity(name, -delta, user=_current_username())
+            item = manager.adjust_quantity(
+                name, -delta, store_id=store_id, user=_current_username()
+            )
         except ValueError as exc:
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
@@ -339,8 +512,9 @@ def create_app(
     @app.delete("/api/items/<string:name>")
     @role_required("admin", "super_admin")
     def delete_item(name: str) -> Any:
+        store_id = _resolve_store_id(request.args.get("store_id"))
         try:
-            manager.delete_item(name, user=_current_username())
+            manager.delete_item(name, store_id=store_id, user=_current_username())
         except KeyError as exc:
             return {"error": str(exc)}, 404
         return "", 204
@@ -360,24 +534,30 @@ def create_app(
             if limit_value < 0:
                 return {"error": "Invalid limit"}, 400
             limit = limit_value
-        history_entries = manager.list_history(limit=limit)
+        store_id = _resolve_store_id(request.args.get("store_id"))
+        history_entries = manager.list_history(store_id=store_id, limit=limit)
         return jsonify([entry.to_dict() for entry in history_entries])
 
     @app.get("/api/items/template")
     @login_required
     def download_template() -> Response:
         rows = [
-            {"名称": "示例SKU", "数量": 50, "单位": "件", "阈值提醒": 10},
+            {"名称": "示例SKU", "数量": 50, "单位": "件", "阈值提醒": 10, "库存分类": "未分类"},
         ]
-        content = _rows_to_csv(["名称", "数量", "单位", "阈值提醒"], rows)
+        content = _rows_to_csv(["名称", "数量", "单位", "阈值提醒", "库存分类"], rows)
         filename = _timestamped_filename("inventory_template")
         return _csv_response(content, filename)
 
     @app.get("/api/items/export")
     @login_required
     def export_inventory() -> Response:
-        rows = manager.export_items()
+        selected_store = _resolve_store_id(request.args.get("store_id"))
+        rows = manager.export_items(store_id=selected_store)
         fieldnames = [
+            "store_id",
+            "store_name",
+            "category_id",
+            "category_name",
             "name",
             "quantity",
             "unit",
@@ -395,7 +575,8 @@ def create_app(
     @app.get("/api/history/export")
     @login_required
     def export_history() -> Response:
-        entries = manager.list_history()
+        selected_store = _resolve_store_id(request.args.get("store_id"))
+        entries = manager.list_history(store_id=selected_store)
         action_labels = {
             "in": "入库",
             "out": "出库",
@@ -407,15 +588,27 @@ def create_app(
         for entry in entries:
             local_time = entry.timestamp.astimezone().strftime("%Y-%m-%d %H:%M:%S")
             user = str(entry.meta.get("user") or "系统")
+            store_name = str(
+                entry.meta.get("store_name")
+                or entry.meta.get("store_id")
+                or "—"
+            )
+            category_name = str(
+                entry.meta.get("category_name")
+                or entry.meta.get("category_id")
+                or "—"
+            )
             rows.append(
                 {
                     "时间": local_time,
                     "操作类型": action_labels.get(entry.action, entry.action or "—"),
                     "SKU 名称": entry.name,
                     "操作用户": user,
+                    "门店": store_name,
+                    "分类": category_name,
                 }
             )
-        fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户"]
+        fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类"]
         content = _rows_to_csv(fieldnames, rows)
         filename = _timestamped_filename("inventory_history")
         return _csv_response(content, filename)
@@ -423,8 +616,9 @@ def create_app(
     @app.get("/analytics")
     @role_required("admin", "super_admin")
     def analytics_dashboard() -> str:
+        selected_store = _resolve_store_id(request.args.get("store"))
         mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
-        entries = manager.list_history()
+        entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         total_inbound = sum(row["inbound"] for row in stats_rows)
         total_outbound = sum(row["outbound"] for row in stats_rows)
@@ -434,6 +628,7 @@ def create_app(
             "net": total_inbound - total_outbound,
         }
         export_params = {"mode": mode}
+        export_params["store_id"] = selected_store
         if start_value:
             export_params["start"] = start_value
         if end_value:
@@ -450,13 +645,16 @@ def create_app(
             has_data=bool(stats_rows),
             export_url=export_url,
             range_label=range_label,
+            selected_store=selected_store,
+            stores=_list_stores(),
         )
 
     @app.get("/api/history/stats/export")
     @role_required("admin", "super_admin")
     def export_history_stats() -> Response:
+        selected_store = _resolve_store_id(request.args.get("store_id"))
         mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
-        entries = manager.list_history()
+        entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         csv_rows = [
             {
@@ -499,7 +697,12 @@ def create_app(
             rows = _extract_import_rows(request)
         except ValueError as exc:
             return {"error": str(exc)}, 400
-        imported = manager.import_items(rows, user=_current_username())
+        payload = _get_payload(request)
+        store_id = payload.get("store_id") or request.args.get("store_id")
+        resolved_store = _resolve_store_id(store_id)
+        imported = manager.import_items(
+            rows, store_id=resolved_store, user=_current_username()
+        )
         return jsonify(
             {
                 "imported": [item.to_dict() for item in imported],
@@ -518,7 +721,10 @@ def create_app(
         except ValueError:
             return redirect(url_for("index", import_error=1))
         total_rows = len(rows)
-        imported = manager.import_items(rows, user=_current_username())
+        resolved_store = _resolve_store_id(request.form.get("store_id"))
+        imported = manager.import_items(
+            rows, store_id=resolved_store, user=_current_username()
+        )
         return redirect(
             url_for(
                 "index",
@@ -609,6 +815,8 @@ def create_app(
         user = _current_user()
         permissions = _build_permissions(user)
         username = _current_username()
+        selected_store = _resolve_store_id(request.form.get("store_id"))
+        category_id = request.form.get("category") or None
 
         if action == "create":
             if not permissions["can_manage_items"]:
@@ -618,17 +826,23 @@ def create_app(
                 max(quantity or 0, 0),
                 unit=unit or "",
                 threshold=_parse_threshold_value(threshold_raw),
+                category=category_id,
+                store_id=selected_store,
                 user=username,
             )
         elif action == "in":
             if not permissions["can_adjust_in"] or quantity is None:
                 return redirect(url_for("index"))
-            manager.adjust_quantity(name, max(quantity, 0), user=username)
+            manager.adjust_quantity(
+                name, max(quantity, 0), store_id=selected_store, user=username
+            )
         elif action == "out":
             if not permissions["can_adjust_out"] or quantity is None:
                 return redirect(url_for("index"))
             try:
-                manager.adjust_quantity(name, -max(quantity, 0), user=username)
+                manager.adjust_quantity(
+                    name, -max(quantity, 0), store_id=selected_store, user=username
+                )
             except ValueError:
                 pass
         elif action == "update":
@@ -647,13 +861,15 @@ def create_app(
                 quantity_to_set,
                 unit=unit,
                 threshold=_parse_threshold_value(threshold_raw),
+                category=category_id,
+                store_id=selected_store,
                 user=username,
             )
         elif action == "delete":
             if not permissions["can_manage_items"]:
                 return redirect(url_for("index"))
             try:
-                manager.delete_item(name, user=username)
+                manager.delete_item(name, store_id=selected_store, user=username)
             except KeyError:
                 pass
         return redirect(url_for("index"))
@@ -770,6 +986,9 @@ def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
     threshold_column_present = bool(
         header_keys & _CSV_FIELD_ALIASES_NORMALIZED.get("threshold", set())
     )
+    category_column_present = bool(
+        header_keys & _CSV_FIELD_ALIASES_NORMALIZED.get("category", set())
+    )
 
     rows: List[Dict[str, Any]] = []
     for row in reader:
@@ -787,6 +1006,8 @@ def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
         }
         if threshold_column_present:
             record["threshold"] = _resolve_csv_field(normalized, "threshold")
+        if category_column_present:
+            record["category"] = _resolve_csv_field(normalized, "category")
         rows.append(record)
     return rows
 
@@ -904,6 +1125,12 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
         label = "动态"
         details: List[str] = []
         operator = str(meta.get("user") or "系统")
+        store_name = str(meta.get("store_name") or meta.get("store_id") or "")
+        category_name = str(meta.get("category_name") or meta.get("category_id") or "")
+        if store_name:
+            details.append(f"门店：{store_name}")
+        if category_name:
+            details.append(f"分类：{category_name}")
 
         if entry.action == "create":
             badge = "info"

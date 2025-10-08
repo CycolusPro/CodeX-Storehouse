@@ -30,6 +30,8 @@ def test_set_and_get(tmp_path: Path) -> None:
     assert item.created_quantity == 10
     assert item.last_in_delta == 10
     assert item.threshold == 3
+    assert item.category == "uncategorized"
+    assert item.store_id == "default"
 
     fetched = manager.get_item("螺丝")
     assert fetched.quantity == 10
@@ -40,6 +42,8 @@ def test_set_and_get(tmp_path: Path) -> None:
     assert fetched.created_quantity == 10
     assert fetched.last_in_delta == 10
     assert fetched.threshold == 3
+    assert fetched.category == "uncategorized"
+    assert fetched.store_id == "default"
 
 
 def test_adjust_quantity(tmp_path: Path) -> None:
@@ -104,6 +108,8 @@ def test_serialization_contains_timestamps(tmp_path: Path) -> None:
     assert payload["last_in_delta"] == 4
     assert payload["last_out_delta"] is None
     assert payload["threshold"] == 1
+    assert payload["category"] == "uncategorized"
+    assert payload["store_id"] == "default"
 
 
 def test_delete_item(tmp_path: Path) -> None:
@@ -170,6 +176,52 @@ def test_clear_history(tmp_path: Path) -> None:
     assert manager.list_history() == []
 
 
+def test_store_and_category_management(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    stores = manager.list_stores()
+    assert "default" in stores
+
+    created_store = manager.create_store("北区仓库")
+    assert created_store["name"] == "北区仓库"
+    assert created_store["id"] in manager.list_stores()
+
+    item = manager.set_quantity(
+        "物料A",
+        5,
+        store_id=created_store["id"],
+        category="饮料",
+    )
+    assert item.store_id == created_store["id"]
+    category_id = item.category
+    categories = manager.list_categories()
+    assert category_id in categories
+
+    manager.delete_category(category_id, cascade=False)
+    reassigned = manager.get_item("物料A", store_id=created_store["id"])
+    assert reassigned.category == "uncategorized"
+
+    manager.delete_store(created_store["id"], cascade=True)
+    assert created_store["id"] not in manager.list_stores()
+
+
+def test_import_creates_category(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    rows = [
+        {"name": "水杯", "quantity": 3, "category": "日用品"},
+        {"name": "纸巾", "quantity": 6, "category": "日用品"},
+    ]
+    imported = manager.import_items(rows, user="tester")
+    assert len(imported) == 2
+    category_id = imported[0].category
+    categories = manager.list_categories()
+    assert category_id in categories
+    assert categories[category_id]["name"] == "日用品"
+
+
 def test_history_api_endpoint(tmp_path: Path) -> None:
     pytest.importorskip("flask")
     from inventory_app.app import create_app
@@ -188,6 +240,8 @@ def test_history_api_endpoint(tmp_path: Path) -> None:
     assert response.status_code == 201
     created_payload = response.get_json()
     assert created_payload["threshold"] == 3
+    assert created_payload["store_id"] == "default"
+    assert created_payload["category"] == "uncategorized"
 
     client.post("/api/items/咖啡豆/in", json={"quantity": 2})
 
@@ -223,7 +277,7 @@ def test_history_export_csv_format(tmp_path: Path) -> None:
 
     text = response.data.decode("utf-8-sig")
     reader = csv.DictReader(StringIO(text))
-    assert reader.fieldnames == ["时间", "操作类型", "SKU 名称", "操作用户"]
+    assert reader.fieldnames == ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类"]
     rows = list(reader)
     assert rows
     latest = rows[0]
@@ -326,7 +380,7 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200
     template_text = template_resp.data.decode("utf-8-sig")
-    assert "名称,数量,单位,阈值提醒" == template_text.splitlines()[0]
+    assert "名称,数量,单位,阈值提醒,库存分类" == template_text.splitlines()[0]
 
 
 def test_history_export_endpoint(tmp_path: Path) -> None:
@@ -348,7 +402,7 @@ def test_history_export_endpoint(tmp_path: Path) -> None:
     text = export_resp.data.decode("utf-8-sig")
     lines = [line for line in text.splitlines() if line]
     assert lines
-    assert lines[0] == "时间,操作类型,SKU 名称,操作用户"
+    assert lines[0] == "时间,操作类型,SKU 名称,操作用户,门店,分类"
     assert any("咖啡豆" in line for line in lines[1:])
     assert any("入库" in line or "出库" in line for line in lines[1:])
 
