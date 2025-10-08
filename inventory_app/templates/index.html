@@ -94,11 +94,11 @@
             {% endif %}
           </div>
           <div class="relative flex-1 min-w-[180px] max-w-md">
-            <input id="keyword" type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+            <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <select id="categoryFilter" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 text-sm">
+            <select id="categoryFilter" data-category-filter class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 text-sm">
               <option value="">全部分类</option>
               {% for category_id, category in categories.items() %}
                 <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
@@ -166,6 +166,21 @@
               <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#storeModal">管理</button>
             {% endif %}
           </form>
+          <div class="w-full relative">
+            <input data-keyword-input type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+            <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <div class="w-full flex items-center gap-2">
+            <select data-category-filter class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
+              <option value="">全部分类</option>
+              {% for category_id, category in categories.items() %}
+                <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
+              {% endfor %}
+            </select>
+            {% if permissions.can_manage_categories %}
+              <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#categoryModal">分类管理</button>
+            {% endif %}
+          </div>
           <div class="text-slate-600 dark:text-slate-300">
             {{ current_user.username }}
             <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
@@ -733,19 +748,36 @@
       });
 
       // search filter (only keyword; no sidebar filters as requested)
-      const keyword = document.getElementById('keyword');
+      const keywordInputs = document.querySelectorAll('[data-keyword-input]');
       const list = document.getElementById('inventoryList');
       function norm(s){ return (s||'').toString().trim().toLowerCase(); }
-      keyword?.addEventListener('input',()=>{
-        const kw = norm(keyword.value);
-        list?.querySelectorAll('[data-name]')?.forEach(row=>{ const name=row.getAttribute('data-name')||''; row.style.display = !kw || name.includes(kw) ? '' : 'none'; });
+      function applyKeywordFilter(value){
+        const kw = norm(value);
+        list?.querySelectorAll('[data-name]')?.forEach(row=>{
+          const name = row.getAttribute('data-name') || '';
+          row.style.display = !kw || name.includes(kw) ? '' : 'none';
+        });
+      }
+      keywordInputs.forEach(input => {
+        input.addEventListener('input', () => {
+          const value = input.value;
+          keywordInputs.forEach(other => {
+            if(other !== input && other.value !== value){
+              other.value = value;
+            }
+          });
+          applyKeywordFilter(value);
+        });
       });
+      if(keywordInputs.length){
+        applyKeywordFilter(keywordInputs[0].value);
+      }
 
-      const categoryFilter = document.getElementById('categoryFilter');
-      if(categoryFilter){
-        categoryFilter.addEventListener('change', () => {
+      const categoryFilters = document.querySelectorAll('[data-category-filter]');
+      categoryFilters.forEach(select => {
+        select.addEventListener('change', () => {
           const url = new URL(window.location.href);
-          const value = categoryFilter.value;
+          const value = select.value;
           if(value){
             url.searchParams.set('category', value);
           } else {
@@ -753,7 +785,7 @@
           }
           window.location.href = url.toString();
         });
-      }
+      });
     </script>
   </body>
 </html>
