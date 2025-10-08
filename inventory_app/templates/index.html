@@ -116,6 +116,11 @@
           </div>
 
         </div>
+        <form method="post" action="{{ url_for('logout') }}" class="desktop-nav items-center ml-2">
+          <button type="submit" class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">
+            退出登录
+          </button>
+        </form>
         <button id="themeToggle" class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
           <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
@@ -225,10 +230,12 @@
                       </span>
                     </div>
                   </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">{% if permissions.can_manage_items %}设置数量{% else %}调整数量{% endif %}</label>
-                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="{% if permissions.can_manage_items %}当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}（输入新数量）{% else %}输入调整数量{% endif %}" />
-                  </div>
+                  {% if permissions.can_manage_items %}
+                    <div class="md:col-span-2">
+                      <label class="block text-xs text-slate-500 mb-1">设置数量</label>
+                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}（输入新数量）" />
+                    </div>
+                  {% endif %}
                   <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">单位</label>
                     {% if permissions.can_manage_items %}
