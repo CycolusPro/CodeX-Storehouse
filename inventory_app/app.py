@@ -3,18 +3,34 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+from functools import wraps
+from urllib.parse import urlsplit, urljoin
+import os
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    abort,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from .inventory import (
     InventoryHistoryEntry,
     InventoryItem,
     InventoryManager,
 )
+from .auth import UserManager
 
 
 def _normalize_csv_key(value: Any) -> str:
@@ -43,9 +59,152 @@ def _resolve_csv_field(normalized: Dict[str, Any], canonical: str) -> Any:
     return ""
 
 
-def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
+ROLE_LABELS = {
+    "super_admin": "超级管理员",
+    "admin": "管理员",
+    "staff": "普通员工",
+}
+
+
+def create_app(
+    storage_path: str | Path = "inventory_data.json",
+    user_storage_path: str | Path | None = None,
+) -> Flask:
+    storage_path = Path(storage_path)
     app = Flask(__name__)
+    app.config["SECRET_KEY"] = os.environ.get(
+        "INVENTORY_APP_SECRET", "inventory-secret-key"
+    )
+    app.permanent_session_lifetime = timedelta(days=14)
+
     manager = InventoryManager(storage_path=storage_path)
+    user_storage = (
+        Path(user_storage_path)
+        if user_storage_path is not None
+        else storage_path.with_name("users_data.json")
+    )
+    user_manager = UserManager(user_storage)
+
+    def _is_safe_redirect(target: Optional[str]) -> bool:
+        if not target:
+            return False
+        ref_url = urlsplit(request.host_url)
+        test_url = urlsplit(urljoin(request.host_url, target))
+        return (
+            test_url.scheme in {"http", "https"}
+            and ref_url.netloc == test_url.netloc
+        )
+
+    def _current_user():
+        return getattr(g, "current_user", None)
+
+    def _current_username() -> Optional[str]:
+        user = _current_user()
+        return None if user is None else user.username
+
+    def _build_permissions(user: Optional[Any]) -> Dict[str, bool]:
+        role = getattr(user, "role", None)
+        return {
+            "can_adjust": role in {"staff", "admin", "super_admin"},
+            "can_manage_items": role in {"admin", "super_admin"},
+            "can_manage_threshold": role in {"admin", "super_admin"},
+            "can_manage_users": role == "super_admin",
+        }
+
+    def _is_api_request() -> bool:
+        if request.path.startswith("/api/"):
+            return True
+        best = request.accept_mimetypes.best
+        return best == "application/json"
+
+    def _unauthorized_response():
+        if _is_api_request():
+            return jsonify({"error": "Unauthorized"}), 401
+        next_target = request.full_path if request.query_string else request.path
+        return redirect(url_for("login", next=next_target))
+
+    def _forbidden_response():
+        if _is_api_request():
+            return jsonify({"error": "Forbidden"}), 403
+        abort(403)
+
+    @app.before_request
+    def load_current_user() -> None:
+        username = session.get("user")
+        g.current_user = None
+        if not username:
+            return
+        try:
+            g.current_user = user_manager.get_user(username)
+        except KeyError:
+            session.pop("user", None)
+
+    @app.context_processor
+    def inject_globals() -> Dict[str, Any]:
+        user = _current_user()
+        return {
+            "current_user": user,
+            "permissions": _build_permissions(user),
+            "role_labels": ROLE_LABELS,
+        }
+
+    def login_required(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if _current_user() is None:
+                return _unauthorized_response()
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    def role_required(*roles: str):
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                user = _current_user()
+                if user is None:
+                    return _unauthorized_response()
+                if user.role not in roles:
+                    return _forbidden_response()
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login() -> Any:
+        if _current_user() is not None:
+            next_target = request.args.get("next")
+            if _is_safe_redirect(next_target):
+                return redirect(next_target)
+            return redirect(url_for("index"))
+
+        error: Optional[str] = None
+        next_target = request.args.get("next")
+        if not _is_safe_redirect(next_target):
+            next_target = None
+
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            user = user_manager.authenticate(username, password)
+            if user is None:
+                error = "账号或密码错误"
+            else:
+                session["user"] = user.username
+                session.permanent = True
+                redirect_target = request.form.get("next") or request.args.get("next")
+                if not _is_safe_redirect(redirect_target):
+                    redirect_target = url_for("index")
+                return redirect(redirect_target)
+        return render_template("login.html", error=error, next=next_target)
+
+    @app.post("/logout")
+    @login_required
+    def logout() -> Any:
+        session.pop("user", None)
+        return redirect(url_for("login"))
 
     def _format_datetime(value: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M") -> str:
         if value is None:
@@ -61,6 +220,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         return max(values)
 
     @app.get("/")
+    @login_required
     def index() -> str:
         items = sorted(manager.list_items().values(), key=lambda item: item.name)
         total_quantity = sum(item.quantity for item in items)
@@ -88,11 +248,13 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         )
 
     @app.get("/api/items")
+    @login_required
     def list_items() -> Any:
         items = manager.list_items()
         return jsonify([item.to_dict() for item in items.values()])
 
     @app.post("/api/items")
+    @role_required("admin", "super_admin")
     def add_item() -> Any:
         payload = _get_payload(request)
         name = payload.get("name")
@@ -101,10 +263,13 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             return {"error": "Missing item name"}, 400
         unit = str(payload.get("unit", "") or "").strip()
         threshold = _parse_threshold_value(payload.get("threshold"))
-        item = manager.set_quantity(name, quantity, unit=unit, threshold=threshold)
+        item = manager.set_quantity(
+            name, quantity, unit=unit, threshold=threshold, user=_current_username()
+        )
         return jsonify(item.to_dict()), 201
 
     @app.put("/api/items/<string:name>")
+    @role_required("admin", "super_admin")
     def update_item(name: str) -> Any:
         payload = _get_payload(request)
         if "quantity" not in payload:
@@ -127,41 +292,46 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
                 unit=str(unit).strip() if unit is not None else None,
                 threshold=threshold,
                 keep_threshold=not threshold_provided,
+                user=_current_username(),
             )
         except ValueError as exc:
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
 
     @app.post("/api/items/<string:name>/in")
+    @login_required
     def stock_in(name: str) -> Any:
         payload = _get_payload(request)
         delta = int(payload.get("quantity", 0))
         if delta <= 0:
             return {"error": "Quantity must be greater than zero"}, 400
-        item = manager.adjust_quantity(name, delta)
+        item = manager.adjust_quantity(name, delta, user=_current_username())
         return jsonify(item.to_dict())
 
     @app.post("/api/items/<string:name>/out")
+    @login_required
     def stock_out(name: str) -> Any:
         payload = _get_payload(request)
         delta = int(payload.get("quantity", 0))
         if delta <= 0:
             return {"error": "Quantity must be greater than zero"}, 400
         try:
-            item = manager.adjust_quantity(name, -delta)
+            item = manager.adjust_quantity(name, -delta, user=_current_username())
         except ValueError as exc:
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
 
     @app.delete("/api/items/<string:name>")
+    @role_required("admin", "super_admin")
     def delete_item(name: str) -> Any:
         try:
-            manager.delete_item(name)
+            manager.delete_item(name, user=_current_username())
         except KeyError as exc:
             return {"error": str(exc)}, 404
         return "", 204
 
     @app.get("/api/history")
+    @login_required
     def list_history() -> Any:
         limit_raw = request.args.get("limit")
         limit: Optional[int]
@@ -179,6 +349,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         return jsonify([entry.to_dict() for entry in history_entries])
 
     @app.get("/api/items/template")
+    @login_required
     def download_template() -> Response:
         rows = [
             {"名称": "示例SKU", "数量": 50, "单位": "件", "阈值提醒": 10},
@@ -188,6 +359,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         return _csv_response(content, filename)
 
     @app.get("/api/items/export")
+    @login_required
     def export_inventory() -> Response:
         rows = manager.export_items()
         fieldnames = [
@@ -206,6 +378,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         return _csv_response(content, filename)
 
     @app.get("/api/history/export")
+    @login_required
     def export_history() -> Response:
         entries = manager.list_history()
         rows = []
@@ -225,12 +398,13 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         return _csv_response(content, filename)
 
     @app.post("/api/items/import")
+    @role_required("admin", "super_admin")
     def import_inventory_api() -> Any:
         try:
             rows = _extract_import_rows(request)
         except ValueError as exc:
             return {"error": str(exc)}, 400
-        imported = manager.import_items(rows)
+        imported = manager.import_items(rows, user=_current_username())
         return jsonify(
             {
                 "imported": [item.to_dict() for item in imported],
@@ -239,6 +413,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         )
 
     @app.post("/import")
+    @role_required("admin", "super_admin")
     def import_inventory_form() -> Any:
         upload = request.files.get("file")
         if upload is None or upload.filename == "":
@@ -248,7 +423,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         except ValueError:
             return redirect(url_for("index", import_error=1))
         total_rows = len(rows)
-        imported = manager.import_items(rows)
+        imported = manager.import_items(rows, user=_current_username())
         return redirect(
             url_for(
                 "index",
@@ -257,7 +432,66 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             )
         )
 
+    @app.get("/users")
+    @role_required("super_admin")
+    def manage_users() -> Any:
+        users = sorted(
+            user_manager.list_users().values(), key=lambda u: u.username.lower()
+        )
+        return render_template("users.html", users=users)
+
+    @app.post("/users")
+    @role_required("super_admin")
+    def create_user_route() -> Any:
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        role = request.form.get("role", "staff")
+        try:
+            user_manager.create_user(username, password, role)
+            flash("已创建用户", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("manage_users"))
+
+    @app.post("/users/<string:username>/update")
+    @role_required("super_admin")
+    def update_user_route(username: str) -> Any:
+        new_username = request.form.get("username", "").strip() or username
+        new_password = request.form.get("password") or None
+        role = request.form.get("role") or None
+        try:
+            updated_user = user_manager.update_user(
+                username,
+                new_username=new_username,
+                new_password=new_password,
+                new_role=role,
+            )
+            if _current_username() == username:
+                session["user"] = updated_user.username
+            flash("已更新用户信息", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        except KeyError:
+            flash("用户不存在", "error")
+        return redirect(url_for("manage_users"))
+
+    @app.post("/users/<string:username>/delete")
+    @role_required("super_admin")
+    def delete_user_route(username: str) -> Any:
+        if _current_username() == username:
+            flash("不能删除当前登录账号", "error")
+            return redirect(url_for("manage_users"))
+        try:
+            user_manager.delete_user(username)
+            flash("已删除用户", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        except KeyError:
+            flash("用户不存在", "error")
+        return redirect(url_for("manage_users"))
+
     @app.post("/submit")
+    @login_required
     def submit_form() -> Any:
         action = request.form.get("action")
         name = request.form.get("name", "").strip()
@@ -277,33 +511,46 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
 
         unit = None if unit_raw is None else str(unit_raw).strip()
 
+        user = _current_user()
+        permissions = _build_permissions(user)
+        username = _current_username()
+
         if action == "create":
+            if not permissions["can_manage_items"]:
+                return redirect(url_for("index"))
             manager.set_quantity(
                 name,
                 max(quantity or 0, 0),
                 unit=unit or "",
                 threshold=_parse_threshold_value(threshold_raw),
+                user=username,
             )
         elif action == "in":
-            if quantity is not None:
-                manager.adjust_quantity(name, max(quantity, 0))
+            if not permissions["can_adjust"] or quantity is None:
+                return redirect(url_for("index"))
+            manager.adjust_quantity(name, max(quantity, 0), user=username)
         elif action == "out":
-            if quantity is not None:
-                try:
-                    manager.adjust_quantity(name, -max(quantity, 0))
-                except ValueError:
-                    pass
-        elif action == "update":
-            if quantity is not None:
-                manager.set_quantity(
-                    name,
-                    max(quantity, 0),
-                    unit=unit,
-                    threshold=_parse_threshold_value(threshold_raw),
-                )
-        elif action == "delete":
+            if not permissions["can_adjust"] or quantity is None:
+                return redirect(url_for("index"))
             try:
-                manager.delete_item(name)
+                manager.adjust_quantity(name, -max(quantity, 0), user=username)
+            except ValueError:
+                pass
+        elif action == "update":
+            if not permissions["can_manage_items"] or quantity is None:
+                return redirect(url_for("index"))
+            manager.set_quantity(
+                name,
+                max(quantity, 0),
+                unit=unit,
+                threshold=_parse_threshold_value(threshold_raw),
+                user=username,
+            )
+        elif action == "delete":
+            if not permissions["can_manage_items"]:
+                return redirect(url_for("index"))
+            try:
+                manager.delete_item(name, user=username)
             except KeyError:
                 pass
         return redirect(url_for("index"))
@@ -473,6 +720,7 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
         badge = "secondary"
         label = "动态"
         details: List[str] = []
+        operator = str(meta.get("user") or "系统")
 
         if entry.action == "create":
             badge = "info"
@@ -534,6 +782,7 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
                 "name": entry.name,
                 "badge": badge,
                 "details": details,
+                "user": operator,
             }
         )
 

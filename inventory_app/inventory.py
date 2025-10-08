@@ -161,6 +161,7 @@ class InventoryManager:
         threshold: Optional[int] = None,
         *,
         keep_threshold: bool = False,
+        user: Optional[str] = None,
     ) -> InventoryItem:
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
@@ -193,15 +194,18 @@ class InventoryManager:
             data[name] = record
             self._write_data(data)
             if is_new:
+                meta = {
+                    "quantity": quantity,
+                    "unit": new_unit,
+                }
+                if user:
+                    meta["user"] = user
                 self._append_history_entry(
                     InventoryHistoryEntry(
                         timestamp=now,
                         action="create",
                         name=name,
-                        meta={
-                            "quantity": quantity,
-                            "unit": new_unit,
-                        },
+                        meta=meta,
                     )
                 )
             else:
@@ -217,6 +221,8 @@ class InventoryManager:
                         meta["previous_unit"] = previous_unit
                     if delta != 0:
                         meta["delta"] = delta
+                    if user:
+                        meta["user"] = user
                     self._append_history_entry(
                         InventoryHistoryEntry(
                             timestamp=now,
@@ -228,7 +234,9 @@ class InventoryManager:
             item = self._record_to_item(name, record)
         return item
 
-    def adjust_quantity(self, name: str, delta: int) -> InventoryItem:
+    def adjust_quantity(
+        self, name: str, delta: int, *, user: Optional[str] = None
+    ) -> InventoryItem:
         with self._lock:
             data = self._read_data()
             record = self._coerce_record(data.get(name))
@@ -241,31 +249,37 @@ class InventoryManager:
             if delta > 0:
                 record["last_in"] = _serialize_timestamp(now)
                 record["last_in_delta"] = delta
+                meta = {
+                    "delta": delta,
+                    "new_quantity": new_quantity,
+                    "unit": record.get("unit", ""),
+                }
+                if user:
+                    meta["user"] = user
                 self._append_history_entry(
                     InventoryHistoryEntry(
                         timestamp=now,
                         action="in",
                         name=name,
-                        meta={
-                            "delta": delta,
-                            "new_quantity": new_quantity,
-                            "unit": record.get("unit", ""),
-                        },
+                        meta=meta,
                     )
                 )
             elif delta < 0:
                 record["last_out"] = _serialize_timestamp(now)
                 record["last_out_delta"] = abs(delta)
+                meta = {
+                    "delta": abs(delta),
+                    "new_quantity": new_quantity,
+                    "unit": record.get("unit", ""),
+                }
+                if user:
+                    meta["user"] = user
                 self._append_history_entry(
                     InventoryHistoryEntry(
                         timestamp=now,
                         action="out",
                         name=name,
-                        meta={
-                            "delta": abs(delta),
-                            "new_quantity": new_quantity,
-                            "unit": record.get("unit", ""),
-                        },
+                        meta=meta,
                     )
                 )
             data[name] = record
@@ -273,7 +287,7 @@ class InventoryManager:
             item = self._record_to_item(name, record)
         return item
 
-    def delete_item(self, name: str) -> None:
+    def delete_item(self, name: str, *, user: Optional[str] = None) -> None:
         with self._lock:
             data = self._read_data()
             if name not in data:
@@ -282,15 +296,18 @@ class InventoryManager:
             del data[name]
             self._write_data(data)
             now = _now()
+            meta = {
+                "previous_quantity": record.get("quantity", 0),
+                "unit": record.get("unit", ""),
+            }
+            if user:
+                meta["user"] = user
             self._append_history_entry(
                 InventoryHistoryEntry(
                     timestamp=now,
                     action="delete",
                     name=name,
-                    meta={
-                        "previous_quantity": record.get("quantity", 0),
-                        "unit": record.get("unit", ""),
-                    },
+                    meta=meta,
                 )
             )
 
@@ -321,7 +338,9 @@ class InventoryManager:
             return entries[:limit]
         return entries
 
-    def import_items(self, rows: Iterable[Dict[str, Any]]) -> List[InventoryItem]:
+    def import_items(
+        self, rows: Iterable[Dict[str, Any]], *, user: Optional[str] = None
+    ) -> List[InventoryItem]:
         """Bulk import items from iterable rows.
 
         Each row should provide ``name`` and ``quantity`` fields and may include
@@ -360,6 +379,7 @@ class InventoryManager:
                 unit=unit,
                 threshold=threshold,
                 keep_threshold=not threshold_field_present,
+                user=user,
             )
             imported.append(item)
         return imported
