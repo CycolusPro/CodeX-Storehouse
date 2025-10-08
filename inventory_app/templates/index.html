@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>库存控制中心</title>
+
+    <!-- Tailwind (CDN build) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: ['class'],
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
+            },
+            colors: {
+              brand: {
+                50: '#F4F6FF',
+                100: '#E9EDFF',
+                200: '#C7D0FF',
+                300: '#A4B4FF',
+                400: '#8097FF',
+                500: '#5D7BFF',
+                600: '#3A5EFF',
+                700: '#2447E6',
+                800: '#1B34B0',
+                900: '#14257F'
+              }
+            },
+            boxShadow: {
+              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)',
+              innerlg: 'inset 0 1px 0 rgba(255,255,255,.06), inset 0 -1px 0 rgba(0,0,0,.15)'
+            },
+            backdropBlur: { 12: '12px' },
+            keyframes: {
+              in: { '0%':{opacity:0,transform:'translateY(8px)'}, '100%':{opacity:1,transform:'translateY(0)'} },
+              pingy: { '0%,100%':{transform:'translateY(0)'}, '50%':{transform:'translateY(-2px)'} }
+            },
+            animation: {
+              in: 'in .45s cubic-bezier(.22,.61,.36,1) both',
+              pingy: 'pingy 2s ease-in-out infinite'
+            }
+          }
+        }
+      }
+    </script>
+
+    <style>
+      :root { color-scheme: light dark; }
+      html, body { height: 100%; }
+      .glass { backdrop-filter: blur(12px) saturate(1.15); -webkit-backdrop-filter: blur(12px) saturate(1.15); background: color-mix(in oklab, var(--tw-bg-opacity,1) 0%, transparent 0%); }
+      .surface {
+        background: radial-gradient(120% 120% at 0% 0%, rgba(93,123,255,.15) 0%, transparent 50%),
+                    radial-gradient(120% 120% at 100% 0%, rgba(36,71,230,.14) 0%, transparent 52%),
+                    linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.35));
+      }
+      .surface-dark {
+        background: radial-gradient(120% 120% at 0% 0%, rgba(93,123,255,.14) 0%, transparent 50%),
+                    radial-gradient(120% 120% at 100% 0%, rgba(36,71,230,.12) 0%, transparent 52%),
+                    linear-gradient(180deg, rgba(20,24,40,.65), rgba(20,24,40,.45));
+      }
+      .switcher::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 18px; width: 18px; border-radius: 9999px; background: white; border: 3px solid #5D7BFF; box-shadow: 0 6px 18px rgba(93,123,255,.45); }
+      .switcher { accent-color: #5D7BFF; }
+    </style>
+  </head>
+
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-brand-200/60 selection:text-slate-900">
+    <!-- Top Bar -->
+    <header class="sticky top-0 z-40 supports-[backdrop-filter]:backdrop-blur-12 border-b border-slate-200/60 dark:border-white/5 bg-white/80 dark:bg-slate-900/70">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+        <a href="#" class="flex items-center gap-2 font-semibold tracking-tight group min-w-0" aria-label="返回首页">
+          <svg class="w-5 h-5 text-brand-600 group-hover:animate-pingy shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="truncate">库存控制中心</span>
+        </a>
+        <div class="flex-1"></div>
+        <div class="hidden md:flex items-center gap-2">
+          <div class="relative h-10">
+            <input id="keyword" type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-72 rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+            <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <div class="inline-flex items-center gap-2">
+            <!-- 导入：下拉菜单，含 从CSV导入 与 下载导入模板 -->
+            <div class="relative">
+              <button id="importMenuBtn" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm inline-flex items-center gap-1" aria-haspopup="menu" aria-expanded="false">
+                导入
+                <svg class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div id="importMenu" class="hidden absolute right-0 mt-2 w-44 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft p-1 text-sm z-50" role="menu" aria-labelledby="importMenuBtn">
+                <button id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从 CSV 导入</button>
+                <a href="/api/items/template" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">下载导入模板</a>
+              </div>
+            </div>
+            <a class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/items/export">导出</a>
+            <button class="h-10 px-3 text-sm rounded-xl bg-brand-600 text-white hover:brightness-105" data-open-modal="#addModal">新增</button>
+          </div>
+        </div>
+        <button id="themeToggle" class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
+          <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Hero KPIs -->
+    <section class="relative">
+      <div class="absolute inset-0 -z-10 opacity-90 dark:opacity-70">
+        <div class="h-64 surface dark:hidden"></div>
+        <div class="h-64 hidden dark:block surface-dark"></div>
+      </div>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-in">
+          <div class="col-span-1 lg:col-span-3 p-6 rounded-2xl shadow-xlsoft border border-white/40 dark:border-white/10 bg-white/60 dark:bg-slate-900/50 glass">
+            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div>
+                <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/30 dark:border-white/5 text-slate-700 dark:text-slate-200">控制面板 <span class="opacity-60">实时把握库存动态</span></span>
+                <h1 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">库存控制中心</h1>
+              </div>
+              <div class="grid grid-cols-3 gap-3 w-full lg:w-auto">
+                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
+                  <div class="text-xs text-slate-500">SKU 数量</div>
+                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_items }}</div>
+                </div>
+                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
+                  <div class="text-xs text-slate-500">库存总数</div>
+                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_quantity }}</div>
+                </div>
+                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
+                  <div class="text-xs text-slate-500">出入库</div>
+                  <div class="mt-1 text-sm">入 {{ summary.latest_in|format_datetime('%Y-%m-%d %H:%M') }}<br>出 {{ summary.latest_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <!-- List -->
+      <section class="xl:col-span-2 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold tracking-tight">库存详情 <span class="text-slate-500 font-normal">共 {{ items|length }} 项</span></h2>
+          <div class="md:hidden inline-flex rounded-xl overflow-hidden border border-slate-200/60 dark:border-white/10">
+            <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
+            <a class="px-3 py-2 text-sm" href="/api/items/template">模板</a>
+            <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
+            <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
+          </div>
+        </div>
+
+        {% if import_summary %}
+          <div class="rounded-xl px-4 py-3 border text-sm shadow-innerlg
+                      {% if import_summary.error %} border-red-300/50 bg-red-50 text-red-700 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-200
+                      {% else %} border-emerald-300/50 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-200{% endif %}">
+            {% if import_summary.error %}
+              导入失败，请确认文件为 UTF-8 编码的 CSV，并包含 <code>name</code>、<code>quantity</code> 字段。
+            {% else %}
+              已导入 <strong>{{ import_summary.imported or 0 }}</strong> 条记录{% if import_summary.skipped %}，忽略 <strong>{{ import_summary.skipped }}</strong> 条无效行{% endif %}。
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if items %}
+          <div id="inventoryList" class="divide-y divide-slate-200/70 dark:divide-white/5 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5">
+            {% for item in items %}
+              <div class="px-5 py-5 hover:bg-slate-50/80 dark:hover:bg-white/5 transition" data-name="{{ item.name|lower }}">
+                <form class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center" method="post" action="/submit">
+                  <div class="sm:col-span-5">
+                    <div class="flex items-start sm:items-center justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="font-medium truncate" title="{{ item.name }}">{{ item.name }}</div>
+                        <div class="text-xs text-slate-500 mt-1">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                        <div class="text-xs text-slate-500">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                      </div>
+                      <span class="shrink-0 inline-flex items-center h-7 px-2 rounded-full bg-brand-600/10 text-brand-700 dark:text-brand-300 border border-brand-600/20">
+                        {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="sm:col-span-2">
+                    <label class="block text-xs text-slate-500 mb-1">设置数量</label>
+                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity }}" />
+                  </div>
+                  <div class="sm:col-span-2">
+                    <label class="block text-xs text-slate-500 mb-1">单位</label>
+                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
+                  </div>
+                  <div class="sm:col-span-3 flex flex-wrap sm:justify-end gap-2">
+                    <input type="hidden" name="name" value="{{ item.name }}" />
+                    <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
+                    <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
+                  </div>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-10 text-center text-slate-500">暂无库存记录，点右上角「新增」录入第一条库存。</div>
+        {% endif %}
+      </section>
+
+      <!-- Sidebar -->
+      <aside class="space-y-4">
+        <section class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> 最近动态（最新 5 条）</h3>
+            <a class="text-sm px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/history/export">导出记录</a>
+          </div>
+          <div class="mt-4">
+            {% if timeline %}
+              <ul class="space-y-3">
+                {% for event in timeline %}
+                  <li class="flex items-start gap-3">
+                    <span class="inline-flex text-xs px-2 py-1 rounded-lg border 
+                      {% if event.badge == 'success' %}border-emerald-500/30 text-emerald-600 bg-emerald-600/10{% elif event.badge == 'danger' %}border-red-500/30 text-red-600 bg-red-600/10{% else %}border-slate-400/30 text-slate-600 bg-slate-400/10{% endif %}">
+                      {{ event.type }}
+                    </span>
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium">{{ event.name }}</div>
+                      <div class="text-xs text-slate-500">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                      {% if event.details %}
+                        {% if event.details is string %}
+                          <div class="text-xs text-slate-500 mt-1">{{ event.details }}</div>
+                        {% else %}
+                          <ul class="text-xs text-slate-500 mt-2 list-disc list-inside">
+                            {% for detail in event.details %}
+                              <li>{{ detail }}</li>
+                            {% endfor %}
+                          </ul>
+                        {% endif %}
+                      {% endif %}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-slate-500 text-sm">当前暂无出入库记录，开始第一次操作后即可在此查看。</p>
+            {% endif %}
+          </div>
+        </section>
+
+      </aside>
+    </main>
+
+    <!-- Hidden Import Form -->
+    <form id="importForm" class="hidden" action="/import" method="post" enctype="multipart/form-data">
+      <input id="importFile" name="file" type="file" accept=".csv,text/csv">
+    </form>
+
+    <!-- Add Item Modal -->
+    <div id="addModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
+      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">新增库存</h2>
+          <button class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+        </div>
+        <form method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
+          <input type="hidden" name="action" value="create">
+          <label class="grid gap-1 text-sm">
+            <span class="text-slate-500">物品名称</span>
+            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-name" name="name" placeholder="例如：咖啡豆" required>
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="grid gap-1 text-sm">
+              <span class="text-slate-500">初始数量</span>
+              <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-quantity" name="quantity" type="number" min="0" step="1" value="0" required>
+            </label>
+            <label class="grid gap-1 text-sm">
+              <span class="text-slate-500">单位（可选）</span>
+              <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-unit" name="unit" placeholder="件 / 盒 / 千克">
+            </label>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
+            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 z-[70] hidden">
+      <div class="rounded-xl bg-emerald-600 text-white shadow-xlsoft px-4 py-3 text-sm">操作已提交</div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+      // theme
+      const root = document.documentElement;
+      const getTheme = () => localStorage.getItem('theme');
+      const setTheme = t => localStorage.setItem('theme', t);
+      const applyTheme = t => root.classList.toggle('dark', t === 'dark');
+      const initTheme = () => { const t = getTheme(); if (t) applyTheme(t); else if (window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark'); };
+      initTheme();
+      document.getElementById('themeToggle')?.addEventListener('click', () => { const t = root.classList.contains('dark') ? 'light' : 'dark'; applyTheme(t); setTheme(t); });
+
+      // simple modal
+      function openModal(id){ document.querySelector(id)?.classList.remove('hidden'); document.querySelector(id)?.classList.add('flex'); }
+      function closeModal(id){ const el=document.querySelector(id); el?.classList.add('hidden'); el?.classList.remove('flex'); }
+      document.querySelectorAll('[data-open-modal]')?.forEach(btn=>btn.addEventListener('click',()=>openModal(btn.getAttribute('data-open-modal'))));
+      document.querySelectorAll('[data-close-modal]')?.forEach(btn=>btn.addEventListener('click',()=>closeModal('#addModal')));
+      document.getElementById('addModal')?.addEventListener('click',e=>{ if(e.target.matches('[data-close-modal]')||e.target===e.currentTarget.querySelector('[data-close-modal]')||e.target===e.currentTarget.firstElementChild) closeModal('#addModal'); });
+
+      // toast
+      const toast = document.getElementById('toast');
+      function showToast(){ if(!toast) return; toast.classList.remove('hidden'); setTimeout(()=>toast.classList.add('hidden'), 1800); }
+      document.querySelectorAll('form').forEach(f=>{
+        f.addEventListener('submit', () => { setTimeout(showToast, 50); });
+      });
+
+      // import wiring
+      const fileInput = document.getElementById('importFile');
+      const importForm = document.getElementById('importForm');
+      const importTriggers = [document.getElementById('importTrigger'), document.getElementById('importTriggerM')].filter(Boolean);
+      importTriggers.forEach(t=>t.addEventListener('click',()=>fileInput?.click()));
+      fileInput?.addEventListener('change',()=> fileInput.files.length && importForm.submit());
+
+      // import menu toggle
+      const importMenuBtn = document.getElementById('importMenuBtn');
+      const importMenu = document.getElementById('importMenu');
+      function closeMenus(){ importMenu?.classList.add('hidden'); importMenuBtn?.setAttribute('aria-expanded','false'); }
+      importMenuBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); importMenu?.classList.toggle('hidden'); const expanded = importMenuBtn.getAttribute('aria-expanded')==='true'; importMenuBtn.setAttribute('aria-expanded', String(!expanded)); });
+      document.addEventListener('click', (e)=>{ if(!importMenu || importMenu.classList.contains('hidden')) return; const within = importMenu.contains(e.target) || importMenuBtn.contains(e.target); if(!within) closeMenus(); });
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMenus(); });
+
+      // search filter (only keyword; no sidebar filters as requested)
+      const keyword = document.getElementById('keyword');
+      const list = document.getElementById('inventoryList');
+      function norm(s){ return (s||'').toString().trim().toLowerCase(); }
+      keyword?.addEventListener('input',()=>{
+        const kw = norm(keyword.value);
+        list?.querySelectorAll('[data-name]')?.forEach(row=>{ const name=row.getAttribute('data-name')||''; row.style.display = !kw || name.includes(kw) ? '' : 'none'; });
+      });
+    </script>
+  </body>
+</html>
