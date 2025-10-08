@@ -6,6 +6,15 @@ import pytest
 from inventory_app.inventory import InventoryHistoryEntry, InventoryManager
 
 
+def _login(client) -> None:
+    response = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+
 def test_set_and_get(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
@@ -145,13 +154,30 @@ def test_history_limit(tmp_path: Path) -> None:
     assert entries[0].timestamp >= entries[1].timestamp >= entries[2].timestamp
 
 
+def test_clear_history(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    manager.set_quantity("咖啡豆", 5)
+    manager.adjust_quantity("咖啡豆", 2)
+
+    assert manager.list_history()
+
+    manager.clear_history()
+
+    assert manager.list_history() == []
+
+
 def test_history_api_endpoint(tmp_path: Path) -> None:
     pytest.importorskip("flask")
     from inventory_app.app import create_app
 
     storage = tmp_path / "data.json"
     app = create_app(storage)
+    app.config.update(TESTING=True)
     client = app.test_client()
+
+    _login(client)
 
     response = client.post(
         "/api/items",
@@ -203,7 +229,10 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
 
     storage = tmp_path / "data.json"
     app = create_app(storage)
+    app.config.update(TESTING=True)
     client = app.test_client()
+
+    _login(client)
 
     response = client.post(
         "/api/items/import",
@@ -233,7 +262,10 @@ def test_history_export_endpoint(tmp_path: Path) -> None:
 
     storage = tmp_path / "data.json"
     app = create_app(storage)
+    app.config.update(TESTING=True)
     client = app.test_client()
+
+    _login(client)
 
     client.post("/api/items", json={"name": "咖啡豆", "quantity": 8, "unit": "袋"})
     client.post("/api/items/咖啡豆/in", json={"quantity": 2})
@@ -253,7 +285,10 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
 
     storage = tmp_path / "data.json"
     app = create_app(storage)
+    app.config.update(TESTING=True)
     client = app.test_client()
+
+    _login(client)
 
     csv_payload = "名称,数量,单位,阈值提醒\n茶叶,8,罐,3\n"
     response = client.post(
