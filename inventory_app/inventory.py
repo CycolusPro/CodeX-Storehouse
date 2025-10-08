@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import json
+import re
 
 
 def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
@@ -54,6 +55,29 @@ def _normalize_threshold(value: Any) -> Optional[int]:
     return threshold_int
 
 
+_DEFAULT_STORE_ID = "default"
+_DEFAULT_STORE_NAME = "默认门店"
+_UNCATEGORIZED_ID = "uncategorized"
+_UNCATEGORIZED_NAME = "未分类"
+
+
+def _slugify_identifier(value: str, *, fallback: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    normalized = normalized.strip("-")
+    if not normalized:
+        normalized = fallback
+    return normalized
+
+
+def _next_identifier(base: str, existing: Iterable[str]) -> str:
+    if base not in existing:
+        return base
+    index = 2
+    while f"{base}-{index}" in existing:
+        index += 1
+    return f"{base}-{index}"
+
+
 @dataclass
 class InventoryItem:
     """Represents a single inventory item."""
@@ -61,6 +85,8 @@ class InventoryItem:
     name: str
     quantity: int = 0
     unit: str = ""
+    category: str = ""
+    store_id: str = ""
     last_in: Optional[datetime] = None
     last_out: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -74,6 +100,8 @@ class InventoryItem:
             "name": self.name,
             "quantity": self.quantity,
             "unit": self.unit,
+            "category": self.category,
+            "store_id": self.store_id,
             "last_in": _serialize_timestamp(self.last_in),
             "last_out": _serialize_timestamp(self.last_out),
             "created_at": _serialize_timestamp(self.created_at),
@@ -121,7 +149,7 @@ class InventoryHistoryEntry:
 
 @dataclass
 class InventoryManager:
-    """Manages inventory data persisted to a JSON file."""
+    """Manages inventory data persisted to a JSON file with stores and categories."""
 
     storage_path: Path
     history_path: Optional[Path] = None
@@ -134,21 +162,219 @@ class InventoryManager:
             self.history_path = self.storage_path.with_suffix(suffix)
         else:
             self.history_path = Path(self.history_path)
-        if not self.storage_path.exists():
-            self._write_data({})
+        with self._lock:
+            state = self._load_state_locked()
+            self._write_state_unlocked(state)
         if self.history_path is not None:
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def list_items(self) -> Dict[str, InventoryItem]:
-        data = self._read_data()
-        items: Dict[str, InventoryItem] = {}
-        for name, record in data.items():
-            normalized = self._coerce_record(record)
-            items[name] = self._record_to_item(name, normalized)
-        return items
+    # ------------------------------------------------------------------
+    # Stores and categories
+    # ------------------------------------------------------------------
+    def list_stores(self) -> Dict[str, Dict[str, Any]]:
+        with self._lock:
+            state = self._load_state_locked()
+            stores: Dict[str, Dict[str, Any]] = {}
+            for store_id, store_data in state["stores"].items():
+                stores[store_id] = {
+                    "id": store_id,
+                    "name": store_data.get("name", store_id),
+                    "created_at": store_data.get("created_at"),
+                    "items_count": len(store_data.get("items", {})),
+                }
+            return stores
 
-    def get_item(self, name: str) -> InventoryItem:
-        items = self.list_items()
+    def create_store(self, name: str) -> Dict[str, Any]:
+        candidate = name.strip()
+        if not candidate:
+            raise ValueError("门店名称不能为空")
+        with self._lock:
+            state = self._load_state_locked()
+            stores = state["stores"]
+            existing_names = {data.get("name", key).strip(): key for key, data in stores.items()}
+            if candidate in existing_names:
+                raise ValueError("门店名称已存在")
+            base = _slugify_identifier(candidate, fallback="store")
+            store_id = _next_identifier(base, stores.keys())
+            now_serialized = _serialize_timestamp(_now())
+            stores[store_id] = {
+                "id": store_id,
+                "name": candidate,
+                "created_at": now_serialized,
+                "items": {},
+            }
+            meta = state.setdefault("meta", {})
+            if meta.get("default_store") not in stores:
+                meta["default_store"] = store_id
+            self._write_state_unlocked(state)
+            return {
+                "id": store_id,
+                "name": candidate,
+                "created_at": now_serialized,
+                "items_count": 0,
+            }
+
+    def delete_store(
+        self,
+        store_id: str,
+        *,
+        cascade: bool = False,
+        user: Optional[str] = None,
+    ) -> None:
+        with self._lock:
+            state = self._load_state_locked()
+            stores = state["stores"]
+            if store_id not in stores:
+                raise KeyError(f"Store '{store_id}' not found")
+            if len(stores) <= 1:
+                raise ValueError("至少需要保留一个门店")
+            store = stores[store_id]
+            items = store.get("items", {})
+            if items and not cascade:
+                raise ValueError("门店仍有库存，无法删除")
+            category_map = state["categories"]
+            store_name = store.get("name", store_id)
+            if items and cascade:
+                for item_name, record in list(items.items()):
+                    normalized = self._coerce_record(record, default_category=_UNCATEGORIZED_ID)
+                    category_id = normalized.get("category", _UNCATEGORIZED_ID)
+                    category_entry = category_map.get(category_id, {})
+                    meta = {
+                        "previous_quantity": normalized.get("quantity", 0),
+                        "unit": normalized.get("unit", ""),
+                        "store_id": store_id,
+                        "store_name": store_name,
+                        "category_id": category_id,
+                        "category_name": category_entry.get("name", category_id),
+                    }
+                    if user:
+                        meta["user"] = user
+                    self._append_history_entry(
+                        InventoryHistoryEntry(
+                            timestamp=_now(),
+                            action="delete",
+                            name=item_name,
+                            meta=meta,
+                        )
+                    )
+                items.clear()
+            del stores[store_id]
+            meta = state.setdefault("meta", {})
+            if meta.get("default_store") == store_id:
+                meta["default_store"] = next(iter(stores))
+            self._write_state_unlocked(state)
+
+    def list_categories(self) -> Dict[str, Dict[str, Any]]:
+        with self._lock:
+            state = self._load_state_locked()
+            categories: Dict[str, Dict[str, Any]] = {}
+            for category_id, category_data in state["categories"].items():
+                categories[category_id] = {
+                    "id": category_id,
+                    "name": category_data.get("name", category_id),
+                    "created_at": category_data.get("created_at"),
+                }
+            return categories
+
+    def create_category(self, name: str) -> Dict[str, Any]:
+        candidate = name.strip()
+        if not candidate:
+            raise ValueError("分类名称不能为空")
+        with self._lock:
+            state = self._load_state_locked()
+            categories = state["categories"]
+            for entry in categories.values():
+                if entry.get("name") == candidate:
+                    raise ValueError("分类名称已存在")
+            base = _slugify_identifier(candidate, fallback="category")
+            category_id = _next_identifier(base, categories.keys())
+            now_serialized = _serialize_timestamp(_now())
+            categories[category_id] = {
+                "id": category_id,
+                "name": candidate,
+                "created_at": now_serialized,
+            }
+            self._write_state_unlocked(state)
+            return {
+                "id": category_id,
+                "name": candidate,
+                "created_at": now_serialized,
+            }
+
+    def delete_category(
+        self,
+        category_id: str,
+        *,
+        cascade: bool = False,
+        user: Optional[str] = None,
+    ) -> None:
+        if category_id == _UNCATEGORIZED_ID:
+            raise ValueError("默认分类无法删除")
+        with self._lock:
+            state = self._load_state_locked()
+            categories = state["categories"]
+            if category_id not in categories:
+                raise KeyError(f"Category '{category_id}' not found")
+            default_category = _UNCATEGORIZED_ID
+            for store_id, store in state["stores"].items():
+                items = store.get("items", {})
+                to_delete: List[str] = []
+                for item_name, record in items.items():
+                    normalized = self._coerce_record(record, default_category=default_category)
+                    if normalized.get("category", default_category) != category_id:
+                        continue
+                    if cascade:
+                        meta = {
+                            "previous_quantity": normalized.get("quantity", 0),
+                            "unit": normalized.get("unit", ""),
+                            "store_id": store_id,
+                            "store_name": store.get("name", store_id),
+                            "category_id": category_id,
+                            "category_name": categories[category_id].get("name", category_id),
+                        }
+                        if user:
+                            meta["user"] = user
+                        self._append_history_entry(
+                            InventoryHistoryEntry(
+                                timestamp=_now(),
+                                action="delete",
+                                name=item_name,
+                                meta=meta,
+                            )
+                        )
+                        to_delete.append(item_name)
+                    else:
+                        record["category"] = default_category
+                for item_name in to_delete:
+                    items.pop(item_name, None)
+            del categories[category_id]
+            self._write_state_unlocked(state)
+
+    # ------------------------------------------------------------------
+    # Inventory operations
+    # ------------------------------------------------------------------
+    def list_items(
+        self,
+        store_id: Optional[str] = None,
+        *,
+        category_id: Optional[str] = None,
+    ) -> Dict[str, InventoryItem]:
+        with self._lock:
+            state = self._load_state_locked()
+            resolved_store = self._normalize_store_id(state, store_id)
+            items_map: Dict[str, InventoryItem] = {}
+            store = state["stores"][resolved_store]
+            for name, record in store.get("items", {}).items():
+                normalized = self._coerce_record(record, default_category=_UNCATEGORIZED_ID)
+                if category_id and normalized.get("category") != category_id:
+                    continue
+                items_map[name] = self._record_to_item(
+                    name, normalized, store_id=resolved_store
+                )
+            return items_map
+
+    def get_item(self, name: str, *, store_id: Optional[str] = None) -> InventoryItem:
+        items = self.list_items(store_id=store_id)
         if name not in items:
             raise KeyError(f"Item '{name}' not found")
         return items[name]
@@ -161,99 +387,67 @@ class InventoryManager:
         threshold: Optional[int] = None,
         *,
         keep_threshold: bool = False,
+        category: Optional[str] = None,
+        store_id: Optional[str] = None,
         user: Optional[str] = None,
     ) -> InventoryItem:
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
         with self._lock:
-            data = self._read_data()
-            is_new = name not in data
-            record = self._coerce_record(data.get(name))
-            previous_quantity = record["quantity"]
-            previous_unit = record.get("unit", "")
-            record["quantity"] = quantity
-            if unit is not None:
-                record["unit"] = str(unit).strip()
-            if not keep_threshold:
-                record["threshold"] = _normalize_threshold(threshold)
-            new_unit = record.get("unit", "")
-            now = _now()
-            if is_new:
-                record["created_at"] = _serialize_timestamp(now)
-                record["created_quantity"] = quantity
-                if keep_threshold:
-                    record.setdefault("threshold", _normalize_threshold(threshold))
-            if quantity > previous_quantity:
-                record["last_in"] = _serialize_timestamp(now)
-                record["last_in_delta"] = quantity - previous_quantity
-            elif quantity < previous_quantity:
-                record["last_out"] = _serialize_timestamp(now)
-                record["last_out_delta"] = previous_quantity - quantity
-            elif quantity > 0 and record["last_in"] is None and record["last_out"] is None:
-                record["last_in"] = _serialize_timestamp(now)
-            data[name] = record
-            self._write_data(data)
-            if is_new:
-                meta = {
-                    "quantity": quantity,
-                    "unit": new_unit,
-                }
-                if user:
-                    meta["user"] = user
-                self._append_history_entry(
-                    InventoryHistoryEntry(
-                        timestamp=now,
-                        action="create",
-                        name=name,
-                        meta=meta,
-                    )
-                )
-            else:
-                delta = quantity - previous_quantity
-                unit_changed = (new_unit or "") != (previous_unit or "")
-                if delta != 0 or unit_changed:
-                    meta: Dict[str, Any] = {
-                        "new_quantity": quantity,
-                        "previous_quantity": previous_quantity,
-                        "unit": new_unit,
-                    }
-                    if unit_changed:
-                        meta["previous_unit"] = previous_unit
-                    if delta != 0:
-                        meta["delta"] = delta
-                    if user:
-                        meta["user"] = user
-                    self._append_history_entry(
-                        InventoryHistoryEntry(
-                            timestamp=now,
-                            action="set",
-                            name=name,
-                            meta=meta,
-                        )
-                    )
-            item = self._record_to_item(name, record)
-        return item
+            state = self._load_state_locked()
+            resolved_store = self._normalize_store_id(state, store_id)
+            category_id = self._ensure_category(state, category)
+            item = self._set_quantity_locked(
+                state,
+                resolved_store,
+                name,
+                quantity,
+                unit=unit,
+                threshold=threshold,
+                keep_threshold=keep_threshold,
+                category_id=category_id,
+                user=user,
+            )
+            self._write_state_unlocked(state)
+            return item
 
     def adjust_quantity(
-        self, name: str, delta: int, *, user: Optional[str] = None
+        self,
+        name: str,
+        delta: int,
+        *,
+        store_id: Optional[str] = None,
+        user: Optional[str] = None,
     ) -> InventoryItem:
         with self._lock:
-            data = self._read_data()
-            record = self._coerce_record(data.get(name))
+            state = self._load_state_locked()
+            resolved_store = self._normalize_store_id(state, store_id)
+            store = state["stores"][resolved_store]
+            items = store.get("items", {})
+            if name not in items:
+                raise KeyError(f"Item '{name}' not found")
+            record = self._coerce_record(items[name], default_category=_UNCATEGORIZED_ID)
             current_quantity = record["quantity"]
             new_quantity = current_quantity + delta
             if new_quantity < 0:
                 raise ValueError("Insufficient stock for this operation")
             record["quantity"] = new_quantity
             now = _now()
+            category_id = record.get("category", _UNCATEGORIZED_ID)
+            category_entry = state["categories"].get(category_id, {})
+            meta_base = {
+                "new_quantity": new_quantity,
+                "unit": record.get("unit", ""),
+                "store_id": resolved_store,
+                "store_name": store.get("name", resolved_store),
+                "category_id": category_id,
+                "category_name": category_entry.get("name", category_id),
+            }
             if delta > 0:
                 record["last_in"] = _serialize_timestamp(now)
                 record["last_in_delta"] = delta
-                meta = {
-                    "delta": delta,
-                    "new_quantity": new_quantity,
-                    "unit": record.get("unit", ""),
-                }
+                meta = dict(meta_base)
+                meta["delta"] = delta
                 if user:
                     meta["user"] = user
                 self._append_history_entry(
@@ -267,11 +461,8 @@ class InventoryManager:
             elif delta < 0:
                 record["last_out"] = _serialize_timestamp(now)
                 record["last_out_delta"] = abs(delta)
-                meta = {
-                    "delta": abs(delta),
-                    "new_quantity": new_quantity,
-                    "unit": record.get("unit", ""),
-                }
+                meta = dict(meta_base)
+                meta["delta"] = abs(delta)
                 if user:
                     meta["user"] = user
                 self._append_history_entry(
@@ -282,36 +473,54 @@ class InventoryManager:
                         meta=meta,
                     )
                 )
-            data[name] = record
-            self._write_data(data)
-            item = self._record_to_item(name, record)
-        return item
+            items[name] = record
+            self._write_state_unlocked(state)
+            return self._record_to_item(name, record, store_id=resolved_store)
 
-    def delete_item(self, name: str, *, user: Optional[str] = None) -> None:
+    def delete_item(
+        self,
+        name: str,
+        *,
+        store_id: Optional[str] = None,
+        user: Optional[str] = None,
+    ) -> None:
         with self._lock:
-            data = self._read_data()
-            if name not in data:
+            state = self._load_state_locked()
+            resolved_store = self._normalize_store_id(state, store_id)
+            store = state["stores"][resolved_store]
+            items = store.get("items", {})
+            if name not in items:
                 raise KeyError(f"Item '{name}' not found")
-            record = self._coerce_record(data.get(name))
-            del data[name]
-            self._write_data(data)
-            now = _now()
+            record = self._coerce_record(items[name], default_category=_UNCATEGORIZED_ID)
+            category_id = record.get("category", _UNCATEGORIZED_ID)
+            category_entry = state["categories"].get(category_id, {})
+            del items[name]
+            self._write_state_unlocked(state)
             meta = {
                 "previous_quantity": record.get("quantity", 0),
                 "unit": record.get("unit", ""),
+                "store_id": resolved_store,
+                "store_name": store.get("name", resolved_store),
+                "category_id": category_id,
+                "category_name": category_entry.get("name", category_id),
             }
             if user:
                 meta["user"] = user
             self._append_history_entry(
                 InventoryHistoryEntry(
-                    timestamp=now,
+                    timestamp=_now(),
                     action="delete",
                     name=name,
                     meta=meta,
                 )
             )
 
-    def list_history(self, limit: Optional[int] = None) -> List[InventoryHistoryEntry]:
+    def list_history(
+        self,
+        *,
+        store_id: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[InventoryHistoryEntry]:
         if self.history_path is None:
             return []
         with self._lock:
@@ -332,6 +541,8 @@ class InventoryManager:
                 entry = InventoryHistoryEntry.from_record(payload)
             except ValueError:
                 continue
+            if store_id and entry.meta.get("store_id") != store_id:
+                continue
             entries.append(entry)
         entries.sort(key=lambda entry: entry.timestamp, reverse=True)
         if limit is not None and limit >= 0:
@@ -346,83 +557,129 @@ class InventoryManager:
             self.history_path.write_text("", encoding="utf-8")
 
     def import_items(
-        self, rows: Iterable[Dict[str, Any]], *, user: Optional[str] = None
+        self,
+        rows: Iterable[Dict[str, Any]],
+        *,
+        store_id: Optional[str] = None,
+        user: Optional[str] = None,
     ) -> List[InventoryItem]:
-        """Bulk import items from iterable rows.
-
-        Each row should provide ``name`` and ``quantity`` fields and may include
-        ``unit``. Invalid rows are ignored. The method returns the list of
-        imported/updated items in the order they were successfully applied.
-        """
-
         imported: List[InventoryItem] = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            name = str(row.get("name") or "").strip()
-            if not name:
-                continue
-            quantity_raw = row.get("quantity")
-            try:
-                quantity = int(quantity_raw)
-            except (TypeError, ValueError):
-                continue
-            if quantity < 0:
-                continue
-            unit_value = row.get("unit")
-            unit = None if unit_value is None else str(unit_value).strip()
-            threshold_raw = None
-            threshold_field_present = False
-            if isinstance(row, dict):
+        with self._lock:
+            state = self._load_state_locked()
+            resolved_store = self._normalize_store_id(state, store_id)
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("name") or "").strip()
+                if not name:
+                    continue
+                quantity_raw = row.get("quantity")
+                try:
+                    quantity = int(quantity_raw)
+                except (TypeError, ValueError):
+                    continue
+                if quantity < 0:
+                    continue
+                unit_value = row.get("unit")
+                unit = None if unit_value is None else str(unit_value).strip()
+                threshold_raw = None
+                threshold_field_present = False
                 for key in ("threshold", "阈值提醒", "阈值"):
                     if key in row:
                         threshold_raw = row.get(key)
                         threshold_field_present = True
                         break
-            threshold = _normalize_threshold(threshold_raw)
-            item = self.set_quantity(
-                name,
-                quantity,
-                unit=unit,
-                threshold=threshold,
-                keep_threshold=not threshold_field_present,
-                user=user,
-            )
-            imported.append(item)
+                category_raw = None
+                for key in ("category", "分类", "库存分类"):
+                    if key in row and str(row.get(key) or "").strip():
+                        category_raw = row.get(key)
+                        break
+                category_id = self._ensure_category(state, category_raw)
+                threshold = _normalize_threshold(threshold_raw)
+                item = self._set_quantity_locked(
+                    state,
+                    resolved_store,
+                    name,
+                    quantity,
+                    unit=unit,
+                    threshold=threshold,
+                    keep_threshold=not threshold_field_present,
+                    category_id=category_id,
+                    user=user,
+                )
+                imported.append(item)
+            self._write_state_unlocked(state)
         return imported
 
-    def export_items(self) -> List[Dict[str, Any]]:
-        """Return inventory data formatted for tabular export."""
-
+    def export_items(
+        self,
+        *,
+        store_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
-        items = sorted(self.list_items().values(), key=lambda item: item.name)
-        for item in items:
-            records.append(
-                {
-                    "name": item.name,
-                    "quantity": item.quantity,
-                    "unit": item.unit,
-                    "created_at": _serialize_timestamp(item.created_at),
-                    "last_in": _serialize_timestamp(item.last_in),
-                    "last_in_delta": item.last_in_delta,
-                    "last_out": _serialize_timestamp(item.last_out),
-                    "last_out_delta": item.last_out_delta,
-                    "threshold": item.threshold,
-                }
-            )
+        with self._lock:
+            state = self._load_state_locked()
+            if store_id:
+                store_ids = [self._normalize_store_id(state, store_id)]
+            else:
+                store_ids = list(state["stores"].keys())
+            for sid in store_ids:
+                store = state["stores"][sid]
+                for name, record in store.get("items", {}).items():
+                    normalized = self._coerce_record(record, default_category=_UNCATEGORIZED_ID)
+                    item = self._record_to_item(name, normalized, store_id=sid)
+                    payload = item.to_dict()
+                    category_entry = state["categories"].get(item.category, {})
+                    payload["store_id"] = sid
+                    payload["store_name"] = store.get("name", sid)
+                    payload["category_name"] = category_entry.get("name", item.category)
+                    records.append(payload)
+        records.sort(key=lambda row: (row.get("store_name", ""), row.get("name", "")))
         return records
 
-    def _read_data(self) -> Dict[str, Any]:
-        with self._lock:
-            if not self.storage_path.exists():
-                return {}
-            raw = self.storage_path.read_text(encoding="utf-8") or "{}"
-            return json.loads(raw)
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _initial_state(self) -> Dict[str, Any]:
+        now_serialized = _serialize_timestamp(_now())
+        return {
+            "stores": {
+                _DEFAULT_STORE_ID: {
+                    "id": _DEFAULT_STORE_ID,
+                    "name": _DEFAULT_STORE_NAME,
+                    "created_at": now_serialized,
+                    "items": {},
+                }
+            },
+            "categories": {
+                _UNCATEGORIZED_ID: {
+                    "id": _UNCATEGORIZED_ID,
+                    "name": _UNCATEGORIZED_NAME,
+                    "created_at": now_serialized,
+                }
+            },
+            "meta": {"default_store": _DEFAULT_STORE_ID},
+        }
 
-    def _write_data(self, data: Dict[str, Any]) -> None:
+    def _load_state_locked(self) -> Dict[str, Any]:
+        if not self.storage_path.exists():
+            state = self._initial_state()
+            self._write_state_unlocked(state)
+            return state
+        raw = self.storage_path.read_text(encoding="utf-8") or "{}"
+        try:
+            state = json.loads(raw)
+        except json.JSONDecodeError:
+            state = {}
+        changed, upgraded = self._upgrade_state(state)
+        if changed:
+            self._write_state_unlocked(upgraded)
+        return upgraded
+
+    def _write_state_unlocked(self, state: Dict[str, Any]) -> None:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self.storage_path.with_suffix(".tmp")
-        temp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        temp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
         temp_path.replace(self.storage_path)
 
     def _append_history_entry(self, entry: InventoryHistoryEntry) -> None:
@@ -433,8 +690,249 @@ class InventoryManager:
         with self.history_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+    def _upgrade_state(self, state: Any) -> Tuple[bool, Dict[str, Any]]:
+        changed = False
+        if not isinstance(state, dict):
+            state = {}
+            changed = True
+        now_serialized = _serialize_timestamp(_now())
+        stores_raw = state.get("stores")
+        categories_raw = state.get("categories")
+        meta = state.get("meta")
+        legacy_items: Optional[Dict[str, Any]] = None
+        if not isinstance(stores_raw, dict):
+            legacy_items = {}
+            for key, value in state.items():
+                if key in {"categories", "meta", "stores"}:
+                    continue
+                if isinstance(value, dict):
+                    legacy_items[key] = value
+            stores: Dict[str, Any] = {}
+            changed = True
+        else:
+            stores = dict(stores_raw)
+        if legacy_items is not None:
+            stores[_DEFAULT_STORE_ID] = {
+                "id": _DEFAULT_STORE_ID,
+                "name": _DEFAULT_STORE_NAME,
+                "created_at": now_serialized,
+                "items": legacy_items,
+            }
+        if not stores:
+            stores[_DEFAULT_STORE_ID] = {
+                "id": _DEFAULT_STORE_ID,
+                "name": _DEFAULT_STORE_NAME,
+                "created_at": now_serialized,
+                "items": {},
+            }
+            changed = True
+        for store_id, store_data in list(stores.items()):
+            if not isinstance(store_data, dict):
+                stores[store_id] = {
+                    "id": store_id,
+                    "name": store_id,
+                    "created_at": now_serialized,
+                    "items": {},
+                }
+                changed = True
+                continue
+            if "items" not in store_data or not isinstance(store_data["items"], dict):
+                store_data["items"] = {}
+                changed = True
+            if store_data.get("id") != store_id:
+                store_data["id"] = store_id
+                changed = True
+            if "name" not in store_data or not isinstance(store_data["name"], str):
+                store_data["name"] = store_id
+                changed = True
+            if "created_at" not in store_data:
+                store_data["created_at"] = now_serialized
+                changed = True
+        if not isinstance(categories_raw, dict):
+            categories: Dict[str, Any] = {}
+            changed = True
+        else:
+            categories = dict(categories_raw)
+        if _UNCATEGORIZED_ID not in categories:
+            categories[_UNCATEGORIZED_ID] = {
+                "id": _UNCATEGORIZED_ID,
+                "name": _UNCATEGORIZED_NAME,
+                "created_at": now_serialized,
+            }
+            changed = True
+        for category_id, category_data in list(categories.items()):
+            if not isinstance(category_data, dict):
+                categories[category_id] = {
+                    "id": category_id,
+                    "name": str(category_data),
+                    "created_at": now_serialized,
+                }
+                changed = True
+                continue
+            if category_data.get("id") != category_id:
+                category_data["id"] = category_id
+                changed = True
+            if "name" not in category_data or not isinstance(category_data["name"], str):
+                category_data["name"] = category_id
+                changed = True
+            if "created_at" not in category_data:
+                category_data["created_at"] = now_serialized
+                changed = True
+        for store_data in stores.values():
+            items = store_data.get("items", {})
+            for item_name, record in list(items.items()):
+                if not isinstance(record, dict):
+                    items[item_name] = {"quantity": int(record or 0)}
+                    record = items[item_name]
+                    changed = True
+                category_id = record.get("category")
+                if not isinstance(category_id, str) or not category_id.strip():
+                    record["category"] = _UNCATEGORIZED_ID
+                    changed = True
+                elif category_id not in categories:
+                    categories[category_id] = {
+                        "id": category_id,
+                        "name": category_id,
+                        "created_at": now_serialized,
+                    }
+                    changed = True
+        if not isinstance(meta, dict):
+            meta = {}
+            changed = True
+        if meta.get("default_store") not in stores:
+            meta["default_store"] = next(iter(stores))
+            changed = True
+        upgraded = {
+            "stores": stores,
+            "categories": categories,
+            "meta": meta,
+        }
+        return changed, upgraded
+
+    def _normalize_store_id(self, state: Dict[str, Any], store_id: Optional[str]) -> str:
+        stores = state["stores"]
+        if store_id and store_id in stores:
+            return store_id
+        default_store = state.get("meta", {}).get("default_store")
+        if default_store in stores:
+            return default_store
+        return next(iter(stores))
+
+    def _ensure_category(self, state: Dict[str, Any], category: Optional[str]) -> str:
+        categories = state["categories"]
+        if category is None:
+            return _UNCATEGORIZED_ID
+        candidate = str(category).strip()
+        if candidate == "":
+            return _UNCATEGORIZED_ID
+        if candidate in categories:
+            return candidate
+        for category_id, data in categories.items():
+            if data.get("name") == candidate:
+                return category_id
+        base = _slugify_identifier(candidate, fallback="category")
+        new_id = _next_identifier(base, categories.keys())
+        categories[new_id] = {
+            "id": new_id,
+            "name": candidate,
+            "created_at": _serialize_timestamp(_now()),
+        }
+        return new_id
+
+    def _set_quantity_locked(
+        self,
+        state: Dict[str, Any],
+        store_id: str,
+        name: str,
+        quantity: int,
+        *,
+        unit: Optional[str],
+        threshold: Optional[int],
+        keep_threshold: bool,
+        category_id: str,
+        user: Optional[str],
+    ) -> InventoryItem:
+        store = state["stores"][store_id]
+        items = store.setdefault("items", {})
+        is_new = name not in items
+        record = self._coerce_record(items.get(name), default_category=_UNCATEGORIZED_ID)
+        previous_quantity = record["quantity"]
+        previous_unit = record.get("unit", "")
+        record["quantity"] = quantity
+        if unit is not None:
+            record["unit"] = str(unit).strip()
+        record["category"] = category_id or _UNCATEGORIZED_ID
+        if not keep_threshold:
+            record["threshold"] = _normalize_threshold(threshold)
+        else:
+            if is_new and record.get("threshold") is None:
+                record["threshold"] = _normalize_threshold(threshold)
+        now = _now()
+        if is_new:
+            record["created_at"] = _serialize_timestamp(now)
+            record["created_quantity"] = quantity
+        if quantity > previous_quantity:
+            record["last_in"] = _serialize_timestamp(now)
+            record["last_in_delta"] = quantity - previous_quantity
+        elif quantity < previous_quantity:
+            record["last_out"] = _serialize_timestamp(now)
+            record["last_out_delta"] = previous_quantity - quantity
+        elif quantity > 0 and record.get("last_in") is None and record.get("last_out") is None:
+            record["last_in"] = _serialize_timestamp(now)
+        items[name] = record
+        category_entry = state["categories"].get(category_id, {})
+        store_name = store.get("name", store_id)
+        new_unit = record.get("unit", "")
+        if is_new:
+            meta = {
+                "quantity": quantity,
+                "unit": new_unit,
+                "store_id": store_id,
+                "store_name": store_name,
+                "category_id": category_id,
+                "category_name": category_entry.get("name", category_id),
+            }
+            if user:
+                meta["user"] = user
+            self._append_history_entry(
+                InventoryHistoryEntry(
+                    timestamp=now,
+                    action="create",
+                    name=name,
+                    meta=meta,
+                )
+            )
+        else:
+            delta = quantity - previous_quantity
+            unit_changed = (new_unit or "") != (previous_unit or "")
+            if delta != 0 or unit_changed:
+                meta: Dict[str, Any] = {
+                    "new_quantity": quantity,
+                    "previous_quantity": previous_quantity,
+                    "unit": new_unit,
+                    "store_id": store_id,
+                    "store_name": store_name,
+                    "category_id": category_id,
+                    "category_name": category_entry.get("name", category_id),
+                }
+                if unit_changed:
+                    meta["previous_unit"] = previous_unit
+                if delta != 0:
+                    meta["delta"] = delta
+                if user:
+                    meta["user"] = user
+                self._append_history_entry(
+                    InventoryHistoryEntry(
+                        timestamp=now,
+                        action="set",
+                        name=name,
+                        meta=meta,
+                    )
+                )
+        return self._record_to_item(name, record, store_id=store_id)
+
     @staticmethod
-    def _coerce_record(raw: Any) -> Dict[str, Any]:
+    def _coerce_record(raw: Any, *, default_category: str) -> Dict[str, Any]:
         if isinstance(raw, dict):
             quantity = int(raw.get("quantity", 0))
             raw_unit = raw.get("unit", "")
@@ -446,6 +944,8 @@ class InventoryManager:
             last_in_delta = raw.get("last_in_delta")
             last_out_delta = raw.get("last_out_delta")
             threshold_value = _normalize_threshold(raw.get("threshold"))
+            category_value = raw.get("category")
+            category = default_category if category_value is None else str(category_value).strip() or default_category
         else:
             quantity = int(raw or 0)
             unit = ""
@@ -456,6 +956,7 @@ class InventoryManager:
             last_in_delta = None
             last_out_delta = None
             threshold_value = None
+            category = default_category
         try:
             created_quantity_int: Optional[int]
             if created_quantity is None:
@@ -490,14 +991,22 @@ class InventoryManager:
             "last_in_delta": last_in_delta_int,
             "last_out_delta": last_out_delta_int,
             "threshold": threshold_value,
+            "category": category,
         }
 
     @staticmethod
-    def _record_to_item(name: str, record: Dict[str, Any]) -> InventoryItem:
+    def _record_to_item(
+        name: str,
+        record: Dict[str, Any],
+        *,
+        store_id: str,
+    ) -> InventoryItem:
         return InventoryItem(
             name=name,
             quantity=int(record.get("quantity", 0)),
             unit=str(record.get("unit", "") or "").strip(),
+            category=str(record.get("category", _UNCATEGORIZED_ID)),
+            store_id=store_id,
             last_in=_parse_timestamp(record.get("last_in")),
             last_out=_parse_timestamp(record.get("last_out")),
             created_at=_parse_timestamp(record.get("created_at")),

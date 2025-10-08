@@ -98,8 +98,17 @@
               <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/40 dark:border-white/10 text-slate-600 dark:text-slate-300">统计分析</span>
               <h1 class="mt-2 text-2xl font-bold tracking-tight">出入库统计</h1>
               <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">统计区间：{{ range_label }}</p>
+              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前门店：{{ stores[selected_store].name }}</p>
             </div>
             <form method="get" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 items-end w-full md:w-auto text-sm">
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
+                门店
+                <select name="store" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium">
+                  {% for store_id, store in stores.items() %}
+                    <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
               <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
                 统计方式
                 <select name="mode" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium">
