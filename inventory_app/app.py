@@ -36,7 +36,10 @@ from .auth import UserManager
 def _normalize_csv_key(value: Any) -> str:
     if value is None:
         return ""
-    return str(value).strip().lower()
+    text = str(value).strip().lower()
+    if "\ufeff" in text:
+        text = text.replace("\ufeff", "")
+    return text
 
 
 _CSV_FIELD_ALIASES: Dict[str, set[str]] = {

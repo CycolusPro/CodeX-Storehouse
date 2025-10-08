@@ -431,3 +431,39 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
     items_response = client.get("/api/items")
     items = items_response.get_json()
     assert any(item["name"] == "茶叶" and item.get("threshold") == 3 for item in items)
+
+
+def test_template_roundtrip_import(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app, _parse_csv_rows
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    _login(client)
+
+    template_resp = client.get("/api/items/template")
+    assert template_resp.status_code == 200
+
+    template_text = template_resp.data.decode("utf-8")
+    lines = template_text.splitlines()
+    assert len(lines) >= 2
+    lines[1] = "新品饮料,12,箱,3,饮料"
+    edited = "\n".join(lines)
+
+    parsed_rows = _parse_csv_rows(edited)
+    assert parsed_rows and parsed_rows[0]["name"] == "新品饮料"
+
+    response = client.post(
+        "/import",
+        data={"file": (BytesIO(edited.encode("utf-8")), "bulk.csv")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    items_response = client.get("/api/items")
+    items = items_response.get_json()
+    assert any(item["name"] == "新品饮料" for item in items)
