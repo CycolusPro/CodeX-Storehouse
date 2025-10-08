@@ -437,6 +437,7 @@ class InventoryManager:
             category_entry = state["categories"].get(category_id, {})
             meta_base = {
                 "new_quantity": new_quantity,
+                "previous_quantity": current_quantity,
                 "unit": record.get("unit", ""),
                 "store_id": resolved_store,
                 "store_name": store.get("name", resolved_store),
@@ -886,6 +887,7 @@ class InventoryManager:
         if is_new:
             meta = {
                 "quantity": quantity,
+                "previous_quantity": previous_quantity,
                 "unit": new_unit,
                 "store_id": store_id,
                 "store_name": store_name,

@@ -297,13 +297,25 @@ def test_history_export_csv_format(tmp_path: Path) -> None:
 
     text = response.data.decode("utf-8-sig")
     reader = csv.DictReader(StringIO(text))
-    assert reader.fieldnames == ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类"]
+    assert reader.fieldnames == [
+        "时间",
+        "操作类型",
+        "SKU 名称",
+        "操作用户",
+        "门店",
+        "分类",
+        "初始量",
+        "增减量",
+        "当前量",
+    ]
     rows = list(reader)
     assert rows
     latest = rows[0]
     assert latest["SKU 名称"] == "咖啡豆"
     assert latest["操作类型"] in {"入库", "出库", "新增", "盘点", "删除"}
     assert latest["操作用户"] == "admin"
+    assert latest["当前量"]
+    assert latest["增减量"]
 
 
 def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
@@ -422,7 +434,10 @@ def test_history_export_endpoint(tmp_path: Path) -> None:
     text = export_resp.data.decode("utf-8-sig")
     lines = [line for line in text.splitlines() if line]
     assert lines
-    assert lines[0] == "时间,操作类型,SKU 名称,操作用户,门店,分类"
+    assert (
+        lines[0]
+        == "时间,操作类型,SKU 名称,操作用户,门店,分类,初始量,增减量,当前量"
+    )
     assert any("咖啡豆" in line for line in lines[1:])
     assert any("入库" in line or "出库" in line for line in lines[1:])
 
