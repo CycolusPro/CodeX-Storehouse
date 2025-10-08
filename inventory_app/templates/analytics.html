@@ -48,20 +48,20 @@
           <span>库存控制中心</span>
         </a>
         <div class="flex-1"></div>
-        <div class="hidden md:flex items-center gap-2 text-sm">
-          <a href="{{ url_for('index') }}" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">库存总览</a>
-          <a href="{{ url_for('analytics_dashboard') }}" class="h-10 px-3 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
+        <div class="hidden md:flex items-center gap-2 text-sm font-medium leading-none">
+          <a href="{{ url_for('index') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">库存总览</a>
+          <a href="{{ url_for('analytics_dashboard') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
           {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+            <a href="{{ url_for('manage_users') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">用户管理</a>
           {% endif %}
           <div class="text-slate-600 dark:text-slate-300 whitespace-nowrap">
             {{ current_user.username }}
             <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
           </div>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+            <button type="submit" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">退出</button>
           </form>
-          <button data-theme-toggle class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
+          <button data-theme-toggle class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition" aria-label="切换主题">
             <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
             </svg>
@@ -99,25 +99,25 @@
               <h1 class="mt-2 text-2xl font-bold tracking-tight">出入库统计</h1>
               <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">统计区间：{{ range_label }}</p>
             </div>
-            <form method="get" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end w-full md:w-auto">
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+            <form method="get" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 items-end w-full md:w-auto text-sm">
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
                 统计方式
-                <select name="mode" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm">
+                <select name="mode" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium">
                   <option value="month" {% if mode != 'day' %}selected{% endif %}>按月汇总</option>
                   <option value="day" {% if mode == 'day' %}selected{% endif %}>按日汇总</option>
                 </select>
               </label>
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
                 起始日期
-                <input type="date" name="start" value="{{ start_value }}" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm" />
+                <input type="date" name="start" value="{{ start_value }}" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium" />
               </label>
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
                 截止日期
-                <input type="date" name="end" value="{{ end_value }}" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm" />
+                <input type="date" name="end" value="{{ end_value }}" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium" />
               </label>
-              <div class="flex gap-2">
-                <button type="submit" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl bg-brand-600 text-white text-sm hover:brightness-105">更新</button>
-                <a href="{{ export_url }}" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm hover:bg-brand-500/10">导出 CSV</a>
+              <div class="flex gap-2 col-span-1 sm:col-span-2 lg:col-span-2">
+                <button type="submit" class="flex-1 grid place-items-center h-11 rounded-xl bg-brand-600 text-white text-sm font-medium hover:brightness-105 transition">更新</button>
+                <a href="{{ export_url }}" class="flex-1 grid place-items-center h-11 rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm font-medium hover:bg-brand-500/10 transition">导出 CSV</a>
               </div>
             </form>
           </div>
