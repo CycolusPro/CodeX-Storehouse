@@ -75,15 +75,15 @@
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-brand-200/60 selection:text-slate-900">
     <!-- Top Bar -->
     <header class="sticky top-0 z-40 supports-[backdrop-filter]:backdrop-blur-12 border-b border-slate-200/60 dark:border-white/5 bg-white/80 dark:bg-slate-900/70">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3 flex-wrap md:flex-nowrap">
         <a href="#" class="flex items-center gap-2 font-semibold tracking-tight group min-w-0" aria-label="返回首页">
           <svg class="w-5 h-5 text-brand-600 group-hover:animate-pingy shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           <span class="truncate">库存控制中心</span>
         </a>
         <div class="flex-1"></div>
         <div class="desktop-nav items-center gap-3">
-          <div class="relative h-10">
-            <input id="keyword" type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-72 rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+          <div class="relative h-10 min-w-0">
+            <input id="keyword" type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-56 lg:w-64 xl:w-72 shrink rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <div class="inline-flex items-center gap-2">
@@ -104,21 +104,7 @@
               <button class="h-10 px-3 text-sm rounded-xl bg-brand-600 text-white hover:brightness-105" data-open-modal="#addModal">新增</button>
             {% endif %}
           </div>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="h-10 px-3 text-sm rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
-          </form>
-        </div>
-        <div class="hidden md:flex items-center gap-2 ml-4">
-          {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
-          {% endif %}
-          <div class="text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-            {{ current_user.username }}
-            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
-          </div>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="h-10 px-3 text-sm rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
-          </form>
+
         </div>
         <div class="desktop-nav items-center gap-2 ml-4">
           {% if permissions.can_manage_users %}
@@ -128,9 +114,7 @@
             {{ current_user.username }}
             <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
           </div>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="h-10 px-3 text-sm rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
-          </form>
+
         </div>
         <button id="themeToggle" class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
           <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
