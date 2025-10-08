@@ -166,30 +166,42 @@
 
         {% if items %}
           <div id="inventoryList" class="divide-y divide-slate-200/70 dark:divide-white/5 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5">
-            {% for item in items %}
-              <div class="px-5 py-5 hover:bg-slate-50/80 dark:hover:bg-white/5 transition" data-name="{{ item.name|lower }}">
-                <form class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center" method="post" action="/submit">
-                  <div class="sm:col-span-5">
-                    <div class="flex items-start sm:items-center justify-between gap-3">
+{% for item in items %}
+              {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
+              <div class="px-5 py-5 transition hover:bg-slate-50/80 dark:hover:bg-white/5 {% if is_low %}bg-red-50/80 dark:bg-red-500/10 border-l-4 border-red-400/60{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
+                <form class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center" method="post" action="/submit">
+                  <div class="md:col-span-4">
+                    <div class="flex items-start md:items-center justify-between gap-3">
                       <div class="min-w-0">
                         <div class="font-medium truncate" title="{{ item.name }}">{{ item.name }}</div>
                         <div class="text-xs text-slate-500 mt-1">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
                         <div class="text-xs text-slate-500">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                        {% if item.threshold is not none %}
+                          <div class="text-xs mt-1 {% if is_low %}text-red-600 dark:text-red-300{% else %}text-slate-500{% endif %}">
+                            阈值提醒：≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}{% if is_low %}（当前已触发预警）{% endif %}
+                          </div>
+                        {% else %}
+                          <div class="text-xs text-slate-400 mt-1">未设置阈值提醒</div>
+                        {% endif %}
                       </div>
                       <span class="shrink-0 inline-flex items-center h-7 px-2 rounded-full bg-brand-600/10 text-brand-700 dark:text-brand-300 border border-brand-600/20">
                         {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}
                       </span>
                     </div>
                   </div>
-                  <div class="sm:col-span-2">
+                  <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">设置数量</label>
                     <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity }}" />
                   </div>
-                  <div class="sm:col-span-2">
+                  <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">单位</label>
                     <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
                   </div>
-                  <div class="sm:col-span-3 flex flex-wrap sm:justify-end gap-2">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs text-slate-500 mb-1">阈值提醒（可选）</label>
+                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
+                  </div>
+                  <div class="md:col-span-2 flex flex-wrap md:justify-end gap-2">
                     <input type="hidden" name="name" value="{{ item.name }}" />
                     <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
                     <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
@@ -251,6 +263,33 @@
       <input id="importFile" name="file" type="file" accept=".csv,text/csv">
     </form>
 
+    {% if low_stock_items %}
+      <div id="thresholdAlert" class="fixed inset-0 z-[55] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-red-500/20 dark:bg-red-900/40 backdrop-blur-sm" data-close-alert></div>
+        <div class="relative w-full max-w-lg rounded-2xl border border-red-400/40 dark:border-red-500/40 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-red-600 dark:text-red-300">库存阈值预警</h2>
+            <button class="h-9 w-9 grid place-items-center rounded-full hover:bg-red-100/60 dark:hover:bg-red-500/20" data-close-alert>&times;</button>
+          </div>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">以下 {{ low_stock_items|length }} 个 SKU 当前库存已达到或低于设定的阈值，请及时安排补货：</p>
+          <ul class="mt-4 space-y-3">
+            {% for item in low_stock_items %}
+              <li class="flex items-start justify-between gap-3 rounded-xl border border-red-200/60 dark:border-red-500/30 bg-red-50/70 dark:bg-red-500/10 px-4 py-3">
+                <div class="min-w-0">
+                  <div class="font-medium text-red-700 dark:text-red-200 truncate" title="{{ item.name }}">{{ item.name }}</div>
+                  <div class="text-xs text-red-600/80 dark:text-red-200/80 mt-1">当前库存：{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}，阈值：{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</div>
+                </div>
+                <span class="shrink-0 inline-flex items-center text-xs px-3 py-1 rounded-full bg-white text-red-600 border border-red-300/70">低库存</span>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="mt-5 text-right">
+            <button type="button" class="px-4 py-2 rounded-lg bg-red-500 text-white hover:brightness-110" data-close-alert>我知道了</button>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
     <!-- Add Item Modal -->
     <div id="addModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
       <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
@@ -275,6 +314,11 @@
               <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-unit" name="unit" placeholder="件 / 盒 / 千克">
             </label>
           </div>
+          <label class="grid gap-1 text-sm">
+            <span class="text-slate-500">阈值提醒（可选）</span>
+            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-threshold" name="threshold" type="number" min="0" step="1" placeholder="当库存 ≤ 此值时提醒">
+            <span class="text-xs text-slate-400">留空表示不设置预警。</span>
+          </label>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
             <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105">保存</button>
@@ -327,6 +371,14 @@
       importMenuBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); importMenu?.classList.toggle('hidden'); const expanded = importMenuBtn.getAttribute('aria-expanded')==='true'; importMenuBtn.setAttribute('aria-expanded', String(!expanded)); });
       document.addEventListener('click', (e)=>{ if(!importMenu || importMenu.classList.contains('hidden')) return; const within = importMenu.contains(e.target) || importMenuBtn.contains(e.target); if(!within) closeMenus(); });
       document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMenus(); });
+
+      // threshold alert modal
+      const thresholdAlert = document.getElementById('thresholdAlert');
+      thresholdAlert?.querySelectorAll('[data-close-alert]')?.forEach(el => {
+        el.addEventListener('click', () => {
+          thresholdAlert.classList.add('hidden');
+        });
+      });
 
       // search filter (only keyword; no sidebar filters as requested)
       const keyword = document.getElementById('keyword');

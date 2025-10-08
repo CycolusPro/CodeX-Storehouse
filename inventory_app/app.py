@@ -17,6 +17,32 @@ from .inventory import (
 )
 
 
+def _normalize_csv_key(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().lower()
+
+
+_CSV_FIELD_ALIASES: Dict[str, set[str]] = {
+    "name": {"name", "名称"},
+    "quantity": {"quantity", "数量"},
+    "unit": {"unit", "单位"},
+    "threshold": {"threshold", "阈值提醒", "阈值"},
+}
+
+_CSV_FIELD_ALIASES_NORMALIZED: Dict[str, set[str]] = {
+    key: {_normalize_csv_key(alias) for alias in aliases}
+    for key, aliases in _CSV_FIELD_ALIASES.items()
+}
+
+
+def _resolve_csv_field(normalized: Dict[str, Any], canonical: str) -> Any:
+    for alias in _CSV_FIELD_ALIASES_NORMALIZED.get(canonical, set()):
+        if alias in normalized:
+            return normalized[alias]
+    return ""
+
+
 def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
     app = Flask(__name__)
     manager = InventoryManager(storage_path=storage_path)
@@ -49,12 +75,16 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         history_entries = manager.list_history(limit=5)
         timeline = _recent_activity(history_entries, limit=5)
         import_summary = _parse_import_summary(request)
+        low_stock_items = [
+            item for item in items if item.threshold is not None and item.quantity <= item.threshold
+        ]
         return render_template(
             "index.html",
             items=items,
             summary=summary,
             timeline=timeline,
             import_summary=import_summary,
+            low_stock_items=low_stock_items,
         )
 
     @app.get("/api/items")
@@ -70,7 +100,8 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         if not name:
             return {"error": "Missing item name"}, 400
         unit = str(payload.get("unit", "") or "").strip()
-        item = manager.set_quantity(name, quantity, unit=unit)
+        threshold = _parse_threshold_value(payload.get("threshold"))
+        item = manager.set_quantity(name, quantity, unit=unit, threshold=threshold)
         return jsonify(item.to_dict()), 201
 
     @app.put("/api/items/<string:name>")
@@ -83,12 +114,20 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         except (TypeError, ValueError):
             return {"error": "Invalid quantity"}, 400
         unit = payload.get("unit")
+        threshold_provided = "threshold" in payload
+        threshold = _parse_threshold_value(payload.get("threshold"))
         try:
             manager.get_item(name)
         except KeyError as exc:
             return {"error": str(exc)}, 404
         try:
-            item = manager.set_quantity(name, quantity, unit=str(unit).strip() if unit is not None else None)
+            item = manager.set_quantity(
+                name,
+                quantity,
+                unit=str(unit).strip() if unit is not None else None,
+                threshold=threshold,
+                keep_threshold=not threshold_provided,
+            )
         except ValueError as exc:
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
@@ -142,9 +181,9 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
     @app.get("/api/items/template")
     def download_template() -> Response:
         rows = [
-            {"name": "示例SKU", "quantity": 0, "unit": "件"},
+            {"名称": "示例SKU", "数量": 50, "单位": "件", "阈值提醒": 10},
         ]
-        content = _rows_to_csv(["name", "quantity", "unit"], rows)
+        content = _rows_to_csv(["名称", "数量", "单位", "阈值提醒"], rows)
         filename = _timestamped_filename("inventory_template")
         return _csv_response(content, filename)
 
@@ -160,6 +199,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
             "last_in_delta",
             "last_out",
             "last_out_delta",
+            "threshold",
         ]
         content = _rows_to_csv(fieldnames, rows)
         filename = _timestamped_filename("inventory_export")
@@ -223,6 +263,7 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         name = request.form.get("name", "").strip()
         quantity_raw = request.form.get("quantity")
         unit_raw = request.form.get("unit")
+        threshold_raw = request.form.get("threshold")
         if not name:
             return redirect(url_for("index"))
         quantity: Optional[int]
@@ -237,7 +278,12 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
         unit = None if unit_raw is None else str(unit_raw).strip()
 
         if action == "create":
-            manager.set_quantity(name, max(quantity or 0, 0), unit=unit or "")
+            manager.set_quantity(
+                name,
+                max(quantity or 0, 0),
+                unit=unit or "",
+                threshold=_parse_threshold_value(threshold_raw),
+            )
         elif action == "in":
             if quantity is not None:
                 manager.adjust_quantity(name, max(quantity, 0))
@@ -249,7 +295,12 @@ def create_app(storage_path: str | Path = "inventory_data.json") -> Flask:
                     pass
         elif action == "update":
             if quantity is not None:
-                manager.set_quantity(name, max(quantity, 0), unit=unit)
+                manager.set_quantity(
+                    name,
+                    max(quantity, 0),
+                    unit=unit,
+                    threshold=_parse_threshold_value(threshold_raw),
+                )
         elif action == "delete":
             try:
                 manager.delete_item(name)
@@ -266,6 +317,27 @@ def _get_payload(req: Any) -> Dict[str, Any]:
     if req.form:
         return req.form.to_dict()
     return req.get_json(silent=True) or {}
+
+
+def _parse_threshold_value(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw == "":
+            return None
+        try:
+            parsed = int(raw)
+        except ValueError:
+            return None
+    else:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+    if parsed < 0:
+        return None
+    return parsed
 
 
 def _rows_to_csv(fieldnames: Sequence[str], rows: Iterable[Dict[str, Any]]) -> str:
@@ -344,20 +416,28 @@ def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
     reader = csv.DictReader(StringIO(text))
     if reader.fieldnames is None:
         raise ValueError("Missing header row")
+    header_keys = {_normalize_csv_key(name) for name in reader.fieldnames}
+    threshold_column_present = bool(
+        header_keys & _CSV_FIELD_ALIASES_NORMALIZED.get("threshold", set())
+    )
+
     rows: List[Dict[str, Any]] = []
     for row in reader:
         if not row:
             continue
-        normalized = { (key or "").strip().lower(): value for key, value in row.items() }
+        normalized = {
+            _normalize_csv_key(key): value for key, value in row.items()
+        }
         if not any(str(value or "").strip() for value in normalized.values()):
             continue
-        rows.append(
-            {
-                "name": normalized.get("name", ""),
-                "quantity": normalized.get("quantity"),
-                "unit": normalized.get("unit", ""),
-            }
-        )
+        record: Dict[str, Any] = {
+            "name": _resolve_csv_field(normalized, "name"),
+            "quantity": _resolve_csv_field(normalized, "quantity"),
+            "unit": _resolve_csv_field(normalized, "unit"),
+        }
+        if threshold_column_present:
+            record["threshold"] = _resolve_csv_field(normalized, "threshold")
+        rows.append(record)
     return rows
 
 
