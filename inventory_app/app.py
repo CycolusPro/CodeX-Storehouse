@@ -104,8 +104,12 @@ def create_app(
 
     def _build_permissions(user: Optional[Any]) -> Dict[str, bool]:
         role = getattr(user, "role", None)
+        can_adjust_in = role in {"admin", "super_admin"}
+        can_adjust_out = role in {"staff", "admin", "super_admin"}
         return {
-            "can_adjust": role in {"staff", "admin", "super_admin"},
+            "can_adjust": can_adjust_in or can_adjust_out,
+            "can_adjust_in": can_adjust_in,
+            "can_adjust_out": can_adjust_out,
             "can_manage_items": role in {"admin", "super_admin"},
             "can_manage_threshold": role in {"admin", "super_admin"},
             "can_manage_users": role == "super_admin",
@@ -299,7 +303,7 @@ def create_app(
         return jsonify(item.to_dict())
 
     @app.post("/api/items/<string:name>/in")
-    @login_required
+    @role_required("admin", "super_admin")
     def stock_in(name: str) -> Any:
         payload = _get_payload(request)
         delta = int(payload.get("quantity", 0))
@@ -526,11 +530,11 @@ def create_app(
                 user=username,
             )
         elif action == "in":
-            if not permissions["can_adjust"] or quantity is None:
+            if not permissions["can_adjust_in"] or quantity is None:
                 return redirect(url_for("index"))
             manager.adjust_quantity(name, max(quantity, 0), user=username)
         elif action == "out":
-            if not permissions["can_adjust"] or quantity is None:
+            if not permissions["can_adjust_out"] or quantity is None:
                 return redirect(url_for("index"))
             try:
                 manager.adjust_quantity(name, -max(quantity, 0), user=username)

@@ -252,8 +252,10 @@
                   </div>
                   <div class="md:col-span-2 flex flex-wrap md:justify-end gap-2">
                     <input type="hidden" name="name" value="{{ item.name }}" />
-                    {% if permissions.can_adjust %}
+                    {% if permissions.can_adjust_in %}
                       <button class="px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10" type="submit" name="action" value="in">入库</button>
+                    {% endif %}
+                    {% if permissions.can_adjust_out %}
                       <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="submit" name="action" value="out">出库</button>
                     {% endif %}
                     {% if permissions.can_manage_items %}
