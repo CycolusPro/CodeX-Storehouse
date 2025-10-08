@@ -433,11 +433,6 @@ def create_app(
             "outbound": total_outbound,
             "net": total_inbound - total_outbound,
         }
-        chart_data = {
-            "labels": [row["label"] for row in stats_rows],
-            "inbound": [row["inbound"] for row in stats_rows],
-            "outbound": [row["outbound"] for row in stats_rows],
-        }
         export_params = {"mode": mode}
         if start_value:
             export_params["start"] = start_value
@@ -452,7 +447,6 @@ def create_app(
             end_value=end_value,
             stats_rows=stats_rows,
             totals=totals,
-            chart_data=chart_data,
             has_data=bool(stats_rows),
             export_url=export_url,
             range_label=range_label,

@@ -59,7 +59,7 @@
             <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
           </div>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+            <button type="submit" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
           </form>
           <button data-theme-toggle class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
             <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -77,14 +77,14 @@
       </div>
       <div class="md:hidden border-t border-slate-200/60 dark:border-white/10">
         <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap gap-2 text-sm items-center">
-          <a href="{{ url_for('index') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">库存总览</a>
-          <span class="px-3 py-1 rounded-lg border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</span>
+          <a href="{{ url_for('index') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">库存总览</a>
+          <span class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</span>
           {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">用户管理</a>
+            <a href="{{ url_for('manage_users') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">用户管理</a>
           {% endif %}
           <div class="text-slate-500 dark:text-slate-300">{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</div>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">退出</button>
+            <button type="submit" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">退出</button>
           </form>
         </div>
       </div>
@@ -116,8 +116,8 @@
                 <input type="date" name="end" value="{{ end_value }}" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm" />
               </label>
               <div class="flex gap-2">
-                <button type="submit" class="flex-1 h-10 rounded-xl bg-brand-600 text-white text-sm hover:brightness-105">更新</button>
-                <a href="{{ export_url }}" class="flex-1 h-10 rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm grid place-items-center hover:bg-brand-500/10">导出 CSV</a>
+                <button type="submit" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl bg-brand-600 text-white text-sm hover:brightness-105">更新</button>
+                <a href="{{ export_url }}" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm hover:bg-brand-500/10">导出 CSV</a>
               </div>
             </form>
           </div>
@@ -136,17 +136,6 @@
             <div class="mt-2 text-2xl font-semibold text-brand-600">{{ totals.net }}</div>
           </div>
         </div>
-      </section>
-
-      <section class="p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold tracking-tight">趋势图</h2>
-        </div>
-        {% if has_data %}
-          <canvas id="historyChart" height="320"></canvas>
-        {% else %}
-          <p class="text-sm text-slate-500 dark:text-slate-400">当前筛选范围内暂无出入库记录。</p>
-        {% endif %}
       </section>
 
       <section class="p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft overflow-x-auto">
@@ -201,67 +190,6 @@
           setTheme(next);
         });
       });
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-      const chartPayload = {{ chart_data|tojson }};
-      if (chartPayload && chartPayload.labels && chartPayload.labels.length) {
-        const ctx = document.getElementById('historyChart');
-        if (ctx) {
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: chartPayload.labels,
-              datasets: [
-                {
-                  label: '入库',
-                  data: chartPayload.inbound,
-                  borderColor: 'rgba(34,197,94,0.8)',
-                  backgroundColor: 'rgba(34,197,94,0.15)',
-                  tension: 0.35,
-                  fill: true,
-                  borderWidth: 2,
-                  pointRadius: 3
-                },
-                {
-                  label: '出库',
-                  data: chartPayload.outbound,
-                  borderColor: 'rgba(249,115,22,0.8)',
-                  backgroundColor: 'rgba(249,115,22,0.15)',
-                  tension: 0.35,
-                  fill: true,
-                  borderWidth: 2,
-                  pointRadius: 3
-                }
-              ]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              interaction: { intersect: false, mode: 'index' },
-              plugins: {
-                legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-legend-color') || '#475569' } },
-                tooltip: {
-                  callbacks: {
-                    label: context => `${context.dataset.label}: ${context.formattedValue}`
-                  }
-                }
-              },
-              scales: {
-                x: {
-                  ticks: { color: '#64748b' },
-                  grid: { color: 'rgba(148, 163, 184, 0.2)' }
-                },
-                y: {
-                  beginAtZero: true,
-                  ticks: { color: '#64748b', precision: 0 },
-                  grid: { color: 'rgba(148, 163, 184, 0.2)' }
-                }
-              }
-            }
-          });
-        }
-      }
     </script>
   </body>
 </html>

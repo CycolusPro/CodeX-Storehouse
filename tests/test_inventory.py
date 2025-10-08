@@ -254,7 +254,6 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
     assert dashboard.status_code == 200
     html = dashboard.data.decode("utf-8")
     assert "出入库统计" in html
-    assert "chartPayload" in html
     assert "数据明细" in html
 
     export_response = client.get("/api/history/stats/export?mode=day")
