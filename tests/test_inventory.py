@@ -154,6 +154,20 @@ def test_history_limit(tmp_path: Path) -> None:
     assert entries[0].timestamp >= entries[1].timestamp >= entries[2].timestamp
 
 
+def test_clear_history(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    manager.set_quantity("咖啡豆", 5)
+    manager.adjust_quantity("咖啡豆", 2)
+
+    assert manager.list_history()
+
+    manager.clear_history()
+
+    assert manager.list_history() == []
+
+
 def test_history_api_endpoint(tmp_path: Path) -> None:
     pytest.importorskip("flask")
     from inventory_app.app import create_app

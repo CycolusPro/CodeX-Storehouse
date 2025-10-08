@@ -338,6 +338,13 @@ class InventoryManager:
             return entries[:limit]
         return entries
 
+    def clear_history(self) -> None:
+        if self.history_path is None:
+            return
+        with self._lock:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            self.history_path.write_text("", encoding="utf-8")
+
     def import_items(
         self, rows: Iterable[Dict[str, Any]], *, user: Optional[str] = None
     ) -> List[InventoryItem]:

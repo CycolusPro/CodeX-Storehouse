@@ -93,11 +93,23 @@
                 </div>
               </div>
             {% endif %}
-            <a class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/items/export">导出</a>
             {% if permissions.can_manage_items %}
+              <a class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/items/export">导出</a>
               <button class="h-10 px-3 text-sm rounded-xl bg-brand-600 text-white hover:brightness-105" data-open-modal="#addModal">新增</button>
             {% endif %}
           </div>
+        </div>
+        <div class="hidden md:flex items-center gap-2 ml-4">
+          {% if permissions.can_manage_users %}
+            <a href="{{ url_for('manage_users') }}" class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+          {% endif %}
+          <div class="text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {{ current_user.username }}
+            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
+          </div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="h-10 px-3 text-sm rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+          </form>
         </div>
         <div class="hidden md:flex items-center gap-2 ml-4">
           {% if permissions.can_manage_users %}
@@ -168,7 +180,7 @@
     </section>
 
     <!-- Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 {% if permissions.can_view_history %}xl:grid-cols-3{% else %}xl:grid-cols-1{% endif %} gap-6">
       <!-- List -->
       <section class="xl:col-span-2 space-y-4">
         <div class="flex items-center justify-between">
@@ -177,9 +189,7 @@
             {% if permissions.can_manage_items %}
               <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
               <a class="px-3 py-2 text-sm" href="/api/items/template">模板</a>
-            {% endif %}
-            <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
-            {% if permissions.can_manage_items %}
+              <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
               <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
             {% endif %}
           </div>
@@ -224,7 +234,7 @@
                   </div>
                   <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">{% if permissions.can_manage_items %}设置数量{% else %}调整数量{% endif %}</label>
-                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity if permissions.can_manage_items else '' }}" placeholder="{% if permissions.can_manage_items %}例如 120{% else %}输入调整数量{% endif %}" />
+                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="{% if permissions.can_manage_items %}当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}（输入新数量）{% else %}输入调整数量{% endif %}" />
                   </div>
                   <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">单位</label>
@@ -253,10 +263,10 @@
                   <div class="md:col-span-2 flex flex-wrap md:justify-end gap-2">
                     <input type="hidden" name="name" value="{{ item.name }}" />
                     {% if permissions.can_adjust_in %}
-                      <button class="px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10" type="submit" name="action" value="in">入库</button>
+                      <button class="px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
                     {% endif %}
                     {% if permissions.can_adjust_out %}
-                      <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="submit" name="action" value="out">出库</button>
+                      <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
                     {% endif %}
                     {% if permissions.can_manage_items %}
                       <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
@@ -272,12 +282,20 @@
         {% endif %}
       </section>
 
+      {% if permissions.can_view_history %}
       <!-- Sidebar -->
       <aside class="space-y-4">
         <section class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between gap-2">
             <h3 class="text-sm font-semibold flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> 最近动态（最新 5 条）</h3>
-            <a class="text-sm px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/history/export">导出记录</a>
+            <div class="flex items-center gap-2">
+              <a class="text-sm px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/history/export">导出记录</a>
+              {% if permissions.can_clear_history %}
+                <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
+                  <button type="submit" class="text-sm px-2 py-1 rounded-lg border border-red-400/40 text-red-600 hover:bg-red-500/10">清除记录</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
           <div class="mt-4">
             {% if timeline %}
@@ -314,6 +332,7 @@
         </section>
 
       </aside>
+      {% endif %}
     </main>
 
     <!-- Hidden Import Form -->
@@ -349,12 +368,12 @@
     {% endif %}
 
     <!-- Add Item Modal -->
-    <div id="addModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
+    <div id="addModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
       <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
       <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold">新增库存</h2>
-          <button class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
         </div>
         <form method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
           <input type="hidden" name="action" value="create">
@@ -385,6 +404,30 @@
       </div>
     </div>
 
+    <!-- Adjust Quantity Modal -->
+    <div id="adjustModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
+      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
+      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold" id="adjustModalTitle">调整库存</h2>
+          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+        </div>
+        <div class="mt-2 text-sm text-slate-500" id="adjustModalInfo"></div>
+        <form id="adjustForm" method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
+          <input type="hidden" name="action" id="adjustAction">
+          <input type="hidden" name="name" id="adjustName">
+          <label class="grid gap-1 text-sm">
+            <span class="text-slate-500" id="adjustQuantityLabel">数量</span>
+            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="adjustQuantity" name="quantity" type="number" min="1" step="1" required>
+          </label>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
+            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105" id="adjustSubmitBtn">确认</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="fixed bottom-4 right-4 z-[70] hidden">
       <div class="rounded-xl bg-emerald-600 text-white shadow-xlsoft px-4 py-3 text-sm">操作已提交</div>
@@ -401,12 +444,89 @@
       initTheme();
       document.getElementById('themeToggle')?.addEventListener('click', () => { const t = root.classList.contains('dark') ? 'light' : 'dark'; applyTheme(t); setTheme(t); });
 
-      // simple modal
-      function openModal(id){ document.querySelector(id)?.classList.remove('hidden'); document.querySelector(id)?.classList.add('flex'); }
-      function closeModal(id){ const el=document.querySelector(id); el?.classList.add('hidden'); el?.classList.remove('flex'); }
-      document.querySelectorAll('[data-open-modal]')?.forEach(btn=>btn.addEventListener('click',()=>openModal(btn.getAttribute('data-open-modal'))));
-      document.querySelectorAll('[data-close-modal]')?.forEach(btn=>btn.addEventListener('click',()=>closeModal('#addModal')));
-      document.getElementById('addModal')?.addEventListener('click',e=>{ if(e.target.matches('[data-close-modal]')||e.target===e.currentTarget.querySelector('[data-close-modal]')||e.target===e.currentTarget.firstElementChild) closeModal('#addModal'); });
+      // modal helpers
+      function openModal(selector){
+        const modal = document.querySelector(selector);
+        if(!modal) return;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      function closeModal(selector){
+        const modal = document.querySelector(selector);
+        if(!modal) return;
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      const modalElements = document.querySelectorAll('[data-modal]');
+      document.querySelectorAll('[data-open-modal]')?.forEach(btn => {
+        const target = btn.getAttribute('data-open-modal');
+        if(!target) return;
+        btn.addEventListener('click', () => openModal(target));
+      });
+      document.querySelectorAll('[data-close-modal]')?.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const modal = btn.closest('[data-modal]');
+          if(modal?.id) closeModal(`#${modal.id}`);
+        });
+      });
+      modalElements.forEach(modal => {
+        modal.addEventListener('click', event => {
+          if(event.target === modal) closeModal(`#${modal.id}`);
+        });
+      });
+
+      // adjust modal wiring
+      (function setupAdjustModal(){
+        const adjustModal = document.getElementById('adjustModal');
+        const adjustButtons = document.querySelectorAll('[data-adjust]');
+        const adjustActionInput = document.getElementById('adjustAction');
+        const adjustNameInput = document.getElementById('adjustName');
+        const adjustQuantityInput = document.getElementById('adjustQuantity');
+        const adjustInfo = document.getElementById('adjustModalInfo');
+        const adjustTitle = document.getElementById('adjustModalTitle');
+        const adjustQuantityLabel = document.getElementById('adjustQuantityLabel');
+        const adjustSubmitBtn = document.getElementById('adjustSubmitBtn');
+        if(!adjustModal || !adjustButtons.length || !adjustActionInput || !adjustNameInput || !adjustQuantityInput || !adjustInfo || !adjustTitle || !adjustQuantityLabel || !adjustSubmitBtn){
+          return;
+        }
+        adjustButtons.forEach(button => {
+          button.addEventListener('click', () => {
+            const action = button.getAttribute('data-adjust') || 'in';
+            const name = button.getAttribute('data-name') || '';
+            const unit = button.getAttribute('data-unit') || '';
+            const current = Number(button.getAttribute('data-current') || '0');
+            const isOut = action === 'out';
+            adjustActionInput.value = action;
+            adjustNameInput.value = name;
+            adjustQuantityInput.value = '';
+            adjustQuantityInput.min = 1;
+            if(isOut && current > 0){
+              adjustQuantityInput.setAttribute('max', String(current));
+            } else {
+              adjustQuantityInput.removeAttribute('max');
+            }
+            const disable = isOut && current === 0;
+            adjustQuantityInput.disabled = disable;
+            adjustSubmitBtn.disabled = disable;
+            adjustQuantityInput.placeholder = isOut ? '请输入出库数量' : '请输入入库数量';
+            adjustTitle.textContent = isOut ? '出库' : '入库';
+            adjustQuantityLabel.textContent = isOut ? '出库数量' : '入库数量';
+            adjustSubmitBtn.textContent = isOut ? '确认出库' : '确认入库';
+            const unitSuffix = unit ? ' ' + unit : '';
+            let infoText = `${name} · 当前库存 ${current}${unitSuffix}`;
+            if(disable){
+              infoText += ' · 当前库存不足以出库';
+            }
+            adjustInfo.textContent = infoText;
+            openModal('#adjustModal');
+            setTimeout(() => {
+              if(!adjustQuantityInput.disabled){
+                adjustQuantityInput.focus();
+              }
+            }, 120);
+          });
+        });
+      })();
 
       // toast
       const toast = document.getElementById('toast');

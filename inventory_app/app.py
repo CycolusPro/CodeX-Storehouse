@@ -106,13 +106,17 @@ def create_app(
         role = getattr(user, "role", None)
         can_adjust_in = role in {"admin", "super_admin"}
         can_adjust_out = role in {"staff", "admin", "super_admin"}
+        can_manage_items = role in {"admin", "super_admin"}
+        is_super_admin = role == "super_admin"
         return {
             "can_adjust": can_adjust_in or can_adjust_out,
             "can_adjust_in": can_adjust_in,
             "can_adjust_out": can_adjust_out,
-            "can_manage_items": role in {"admin", "super_admin"},
-            "can_manage_threshold": role in {"admin", "super_admin"},
-            "can_manage_users": role == "super_admin",
+            "can_manage_items": can_manage_items,
+            "can_manage_threshold": can_manage_items,
+            "can_manage_users": is_super_admin,
+            "can_view_history": can_manage_items,
+            "can_clear_history": is_super_admin,
         }
 
     def _is_api_request() -> bool:
@@ -250,6 +254,13 @@ def create_app(
             import_summary=import_summary,
             low_stock_items=low_stock_items,
         )
+
+    @app.post("/history/clear")
+    @role_required("super_admin")
+    def clear_history() -> Any:
+        manager.clear_history()
+        flash("已清除最近动态记录", "success")
+        return redirect(url_for("index"))
 
     @app.get("/api/items")
     @login_required
@@ -541,11 +552,19 @@ def create_app(
             except ValueError:
                 pass
         elif action == "update":
-            if not permissions["can_manage_items"] or quantity is None:
+            if not permissions["can_manage_items"]:
                 return redirect(url_for("index"))
+            if quantity is None:
+                try:
+                    current_item = manager.get_item(name)
+                except KeyError:
+                    return redirect(url_for("index"))
+                quantity_to_set = max(current_item.quantity, 0)
+            else:
+                quantity_to_set = max(quantity, 0)
             manager.set_quantity(
                 name,
-                max(quantity, 0),
+                quantity_to_set,
                 unit=unit,
                 threshold=_parse_threshold_value(threshold_raw),
                 user=username,
