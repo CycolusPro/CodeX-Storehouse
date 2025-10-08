@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping
 from functools import wraps
 from urllib.parse import urlsplit, urljoin
 import os
@@ -396,20 +396,106 @@ def create_app(
     @login_required
     def export_history() -> Response:
         entries = manager.list_history()
+        action_labels = {
+            "in": "入库",
+            "out": "出库",
+            "create": "新增",
+            "set": "盘点",
+            "delete": "删除",
+        }
         rows = []
         for entry in entries:
+            local_time = entry.timestamp.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            user = str(entry.meta.get("user") or "系统")
             rows.append(
                 {
-                    "timestamp": entry.timestamp.astimezone().isoformat(),
-                    "action": entry.action,
-                    "name": entry.name,
-                    "details": _history_meta_to_text(entry.meta),
-                    "meta": json.dumps(entry.meta, ensure_ascii=False, sort_keys=True),
+                    "时间": local_time,
+                    "操作类型": action_labels.get(entry.action, entry.action or "—"),
+                    "SKU 名称": entry.name,
+                    "操作用户": user,
                 }
             )
-        fieldnames = ["timestamp", "action", "name", "details", "meta"]
+        fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户"]
         content = _rows_to_csv(fieldnames, rows)
         filename = _timestamped_filename("inventory_history")
+        return _csv_response(content, filename)
+
+    @app.get("/analytics")
+    @role_required("admin", "super_admin")
+    def analytics_dashboard() -> str:
+        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
+        entries = manager.list_history()
+        stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
+        total_inbound = sum(row["inbound"] for row in stats_rows)
+        total_outbound = sum(row["outbound"] for row in stats_rows)
+        totals = {
+            "inbound": total_inbound,
+            "outbound": total_outbound,
+            "net": total_inbound - total_outbound,
+        }
+        chart_data = {
+            "labels": [row["label"] for row in stats_rows],
+            "inbound": [row["inbound"] for row in stats_rows],
+            "outbound": [row["outbound"] for row in stats_rows],
+        }
+        export_params = {"mode": mode}
+        if start_value:
+            export_params["start"] = start_value
+        if end_value:
+            export_params["end"] = end_value
+        export_url = url_for("export_history_stats", **export_params)
+        range_label = f"{start_value} 至 {end_value}"
+        return render_template(
+            "analytics.html",
+            mode=mode,
+            start_value=start_value,
+            end_value=end_value,
+            stats_rows=stats_rows,
+            totals=totals,
+            chart_data=chart_data,
+            has_data=bool(stats_rows),
+            export_url=export_url,
+            range_label=range_label,
+        )
+
+    @app.get("/api/history/stats/export")
+    @role_required("admin", "super_admin")
+    def export_history_stats() -> Response:
+        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
+        entries = manager.list_history()
+        stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
+        csv_rows = [
+            {
+                "时间": row["label"],
+                "入库数量": row["inbound"],
+                "出库数量": row["outbound"],
+                "净变动": row["net"],
+            }
+            for row in stats_rows
+        ]
+        if not csv_rows:
+            csv_rows.append(
+                {
+                    "时间": f"{start_value} 至 {end_value}",
+                    "入库数量": 0,
+                    "出库数量": 0,
+                    "净变动": 0,
+                }
+            )
+        else:
+            total_inbound = sum(row["入库数量"] for row in csv_rows)
+            total_outbound = sum(row["出库数量"] for row in csv_rows)
+            csv_rows.append(
+                {
+                    "时间": "合计",
+                    "入库数量": total_inbound,
+                    "出库数量": total_outbound,
+                    "净变动": total_inbound - total_outbound,
+                }
+            )
+        fieldnames = ["时间", "入库数量", "出库数量", "净变动"]
+        content = _rows_to_csv(fieldnames, csv_rows)
+        filename = _timestamped_filename("inventory_history_stats")
         return _csv_response(content, filename)
 
     @app.post("/api/items/import")
@@ -731,6 +817,86 @@ def _parse_import_summary(req: Any) -> Optional[Dict[str, Any]]:
     if error:
         summary["error"] = True
     return summary
+
+
+def _parse_date_arg(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _resolve_history_filters(args: Mapping[str, str], mode_hint: Optional[str] = None) -> tuple[str, Optional[datetime], Optional[datetime], str, str]:
+    mode_raw = mode_hint or args.get("mode", "month")
+    mode = "day" if mode_raw == "day" else "month"
+    start_raw = args.get("start")
+    end_raw = args.get("end")
+    today_local = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = today_local.replace(tzinfo=None)
+    span = timedelta(days=13) if mode == "day" else timedelta(days=180)
+    default_start = today - span
+    start_dt = _parse_date_arg(start_raw) or default_start
+    end_dt = _parse_date_arg(end_raw) or today
+    if end_dt < start_dt:
+        start_dt, end_dt = end_dt, start_dt
+    start_value = start_dt.strftime("%Y-%m-%d")
+    end_value = end_dt.strftime("%Y-%m-%d")
+    end_boundary = end_dt + timedelta(days=1)
+    return mode, start_dt, end_boundary, start_value, end_value
+
+
+def _history_statistics(
+    entries: Iterable[InventoryHistoryEntry],
+    *,
+    mode: str = "month",
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    normalized_mode = "day" if mode == "day" else "month"
+    buckets: Dict[str, Dict[str, Any]] = {}
+    for entry in entries:
+        if entry.action not in {"in", "out"}:
+            continue
+        local_time = entry.timestamp.astimezone()
+        naive_time = local_time.replace(tzinfo=None)
+        if start and naive_time < start:
+            continue
+        if end and naive_time >= end:
+            continue
+        if normalized_mode == "day":
+            label = local_time.strftime("%Y-%m-%d")
+            sort_key = datetime(local_time.year, local_time.month, local_time.day)
+        else:
+            label = local_time.strftime("%Y-%m")
+            sort_key = datetime(local_time.year, local_time.month, 1)
+        bucket = buckets.setdefault(
+            label,
+            {"label": label, "inbound": 0, "outbound": 0, "sort_key": sort_key},
+        )
+        delta = entry.meta.get("delta")
+        try:
+            delta_value = int(delta)
+        except (TypeError, ValueError):
+            continue
+        if delta_value < 0:
+            delta_value = abs(delta_value)
+        if entry.action == "in":
+            bucket["inbound"] += delta_value
+        else:
+            bucket["outbound"] += delta_value
+    rows: List[Dict[str, Any]] = []
+    for bucket in sorted(buckets.values(), key=lambda item: item["sort_key"]):
+        rows.append(
+            {
+                "label": bucket["label"],
+                "inbound": bucket["inbound"],
+                "outbound": bucket["outbound"],
+                "net": bucket["inbound"] - bucket["outbound"],
+            }
+        )
+    return rows
 def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> list[Dict[str, Any]]:
     def _unit_suffix(unit: str) -> str:
         return f" {unit}" if unit else ""
