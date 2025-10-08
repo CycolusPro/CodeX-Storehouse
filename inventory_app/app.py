@@ -588,6 +588,13 @@ def create_app(
             "delete": "删除",
         }
         rows = []
+        
+        def _parse_int(value: Any) -> Optional[int]:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
         for entry in entries:
             local_time = entry.timestamp.astimezone().strftime("%Y-%m-%d %H:%M:%S")
             user = str(entry.meta.get("user") or "系统")
@@ -601,6 +608,57 @@ def create_app(
                 or entry.meta.get("category_id")
                 or "—"
             )
+            meta = entry.meta or {}
+            previous_quantity = _parse_int(meta.get("previous_quantity"))
+            new_quantity = _parse_int(meta.get("new_quantity"))
+            delta_value = _parse_int(meta.get("delta"))
+            quantity_value = _parse_int(meta.get("quantity"))
+
+            initial_quantity = previous_quantity
+            current_quantity = new_quantity
+            change_quantity: Optional[int] = None
+
+            if entry.action == "in":
+                if delta_value is not None:
+                    change_quantity = abs(delta_value)
+                if current_quantity is None:
+                    current_quantity = new_quantity
+                if initial_quantity is None and current_quantity is not None and change_quantity is not None:
+                    initial_quantity = current_quantity - change_quantity
+            elif entry.action == "out":
+                if delta_value is not None:
+                    change_quantity = -abs(delta_value)
+                if current_quantity is None:
+                    current_quantity = new_quantity
+                if initial_quantity is None and current_quantity is not None and change_quantity is not None:
+                    initial_quantity = current_quantity - change_quantity
+            elif entry.action == "set":
+                if delta_value is not None:
+                    change_quantity = delta_value
+                if current_quantity is None:
+                    current_quantity = new_quantity
+            elif entry.action == "create":
+                if current_quantity is None:
+                    current_quantity = quantity_value
+                if change_quantity is None and current_quantity is not None:
+                    change_quantity = current_quantity
+                if initial_quantity is None:
+                    initial_quantity = 0
+            elif entry.action == "delete":
+                if change_quantity is None and previous_quantity is not None:
+                    change_quantity = -previous_quantity
+                if current_quantity is None:
+                    current_quantity = 0
+                if initial_quantity is None:
+                    initial_quantity = previous_quantity
+
+            if change_quantity is None and delta_value is not None:
+                change_quantity = delta_value
+            if current_quantity is None and quantity_value is not None:
+                current_quantity = quantity_value
+            if initial_quantity is None and current_quantity is not None and change_quantity is not None:
+                initial_quantity = current_quantity - change_quantity
+
             rows.append(
                 {
                     "时间": local_time,
@@ -609,9 +667,12 @@ def create_app(
                     "操作用户": user,
                     "门店": store_name,
                     "分类": category_name,
+                    "初始量": initial_quantity if initial_quantity is not None else "",
+                    "增减量": change_quantity if change_quantity is not None else "",
+                    "当前量": current_quantity if current_quantity is not None else "",
                 }
             )
-        fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类"]
+        fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类", "初始量", "增减量", "当前量"]
         content = _rows_to_csv(fieldnames, rows)
         filename = _timestamped_filename("inventory_history")
         return _csv_response(content, filename)
