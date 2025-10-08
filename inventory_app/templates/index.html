@@ -75,32 +75,61 @@
           <span class="truncate">库存控制中心</span>
         </a>
         <div class="flex-1"></div>
-        <div class="hidden md:flex items-center gap-2">
+        <div class="hidden md:flex items-center gap-3">
           <div class="relative h-10">
             <input id="keyword" type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-72 rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <div class="inline-flex items-center gap-2">
-            <!-- 导入：下拉菜单，含 从CSV导入 与 下载导入模板 -->
-            <div class="relative">
-              <button id="importMenuBtn" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm inline-flex items-center gap-1" aria-haspopup="menu" aria-expanded="false">
-                导入
-                <svg class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div id="importMenu" class="hidden absolute right-0 mt-2 w-44 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft p-1 text-sm z-50" role="menu" aria-labelledby="importMenuBtn">
-                <button id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从 CSV 导入</button>
-                <a href="/api/items/template" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">下载导入模板</a>
+            {% if permissions.can_manage_items %}
+              <div class="relative">
+                <button id="importMenuBtn" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm inline-flex items-center gap-1" aria-haspopup="menu" aria-expanded="false">
+                  导入
+                  <svg class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div id="importMenu" class="hidden absolute right-0 mt-2 w-44 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft p-1 text-sm z-50" role="menu" aria-labelledby="importMenuBtn">
+                  <button id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从 CSV 导入</button>
+                  <a href="/api/items/template" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">下载导入模板</a>
+                </div>
               </div>
-            </div>
+            {% endif %}
             <a class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/items/export">导出</a>
-            <button class="h-10 px-3 text-sm rounded-xl bg-brand-600 text-white hover:brightness-105" data-open-modal="#addModal">新增</button>
+            {% if permissions.can_manage_items %}
+              <button class="h-10 px-3 text-sm rounded-xl bg-brand-600 text-white hover:brightness-105" data-open-modal="#addModal">新增</button>
+            {% endif %}
           </div>
+        </div>
+        <div class="hidden md:flex items-center gap-2 ml-4">
+          {% if permissions.can_manage_users %}
+            <a href="{{ url_for('manage_users') }}" class="h-10 px-3 text-sm grid place-items-center rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+          {% endif %}
+          <div class="text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {{ current_user.username }}
+            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
+          </div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="h-10 px-3 text-sm rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+          </form>
         </div>
         <button id="themeToggle" class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
           <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
           </svg>
         </button>
+      </div>
+      <div class="md:hidden border-t border-slate-200/60 dark:border-white/10">
+        <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-2 text-sm">
+          <div class="text-slate-600 dark:text-slate-300">
+            {{ current_user.username }}
+            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
+          </div>
+          {% if permissions.can_manage_users %}
+            <a href="{{ url_for('manage_users') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+          {% endif %}
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+          </form>
+        </div>
       </div>
     </header>
 
@@ -145,10 +174,14 @@
         <div class="flex items-center justify-between">
           <h2 class="text-base font-semibold tracking-tight">库存详情 <span class="text-slate-500 font-normal">共 {{ items|length }} 项</span></h2>
           <div class="md:hidden inline-flex rounded-xl overflow-hidden border border-slate-200/60 dark:border-white/10">
-            <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
-            <a class="px-3 py-2 text-sm" href="/api/items/template">模板</a>
+            {% if permissions.can_manage_items %}
+              <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
+              <a class="px-3 py-2 text-sm" href="/api/items/template">模板</a>
+            {% endif %}
             <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
-            <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
+            {% if permissions.can_manage_items %}
+              <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
+            {% endif %}
           </div>
         </div>
 
@@ -190,21 +223,43 @@
                     </div>
                   </div>
                   <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">设置数量</label>
-                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity }}" />
+                    <label class="block text-xs text-slate-500 mb-1">{% if permissions.can_manage_items %}设置数量{% else %}调整数量{% endif %}</label>
+                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="{{ item.quantity if permissions.can_manage_items else '' }}" placeholder="{% if permissions.can_manage_items %}例如 120{% else %}输入调整数量{% endif %}" />
                   </div>
                   <div class="md:col-span-2">
                     <label class="block text-xs text-slate-500 mb-1">单位</label>
-                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
+                    {% if permissions.can_manage_items %}
+                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
+                    {% else %}
+                      <div class="w-full rounded-lg border border-dashed border-slate-200/60 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-2 text-sm text-slate-500">{{ item.unit or '—' }}</div>
+                      <input type="hidden" name="unit" value="{{ item.unit }}" />
+                    {% endif %}
                   </div>
                   <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">阈值提醒（可选）</label>
-                    <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
+                    <label class="block text-xs text-slate-500 mb-1">阈值提醒{% if permissions.can_manage_threshold %}（可选）{% else %}（仅管理员可改）{% endif %}</label>
+                    {% if permissions.can_manage_threshold %}
+                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
+                    {% else %}
+                      <div class="w-full rounded-lg border border-dashed border-slate-200/60 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-2 text-sm text-slate-500">
+                        {% if item.threshold is not none %}
+                          ≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}
+                        {% else %}
+                          未设置阈值
+                        {% endif %}
+                      </div>
+                      <input type="hidden" name="threshold" value="{{ item.threshold if item.threshold is not none else '' }}" />
+                    {% endif %}
                   </div>
                   <div class="md:col-span-2 flex flex-wrap md:justify-end gap-2">
                     <input type="hidden" name="name" value="{{ item.name }}" />
-                    <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
-                    <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
+                    {% if permissions.can_adjust %}
+                      <button class="px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10" type="submit" name="action" value="in">入库</button>
+                      <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="submit" name="action" value="out">出库</button>
+                    {% endif %}
+                    {% if permissions.can_manage_items %}
+                      <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
+                      <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
+                    {% endif %}
                   </div>
                 </form>
               </div>
@@ -234,6 +289,7 @@
                     <div class="min-w-0">
                       <div class="text-sm font-medium">{{ event.name }}</div>
                       <div class="text-xs text-slate-500">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</div>
+                      <div class="text-xs text-slate-400 mt-1">操作人：{{ event.user }}</div>
                       {% if event.details %}
                         {% if event.details is string %}
                           <div class="text-xs text-slate-500 mt-1">{{ event.details }}</div>
