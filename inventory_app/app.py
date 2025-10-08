@@ -620,7 +620,10 @@ def create_app(
     @role_required("admin", "super_admin")
     def analytics_dashboard() -> str:
         selected_store = _resolve_store_id(request.args.get("store"))
-        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
+        stores_map = _list_stores()
+        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(
+            request.args
+        )
         entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         total_inbound = sum(row["inbound"] for row in stats_rows)
@@ -649,7 +652,10 @@ def create_app(
             export_url=export_url,
             range_label=range_label,
             selected_store=selected_store,
-            stores=_list_stores(),
+            selected_store_name=stores_map.get(selected_store, {}).get(
+                "name", selected_store
+            ),
+            stores=stores_map,
         )
 
     @app.get("/api/history/stats/export")
@@ -1075,8 +1081,6 @@ def _history_statistics(
     normalized_mode = "day" if mode == "day" else "month"
     buckets: Dict[str, Dict[str, Any]] = {}
     for entry in entries:
-        if entry.action not in {"in", "out"}:
-            continue
         local_time = entry.timestamp.astimezone()
         naive_time = local_time.replace(tzinfo=None)
         if start and naive_time < start:
@@ -1093,17 +1097,44 @@ def _history_statistics(
             label,
             {"label": label, "inbound": 0, "outbound": 0, "sort_key": sort_key},
         )
-        delta = entry.meta.get("delta")
-        try:
-            delta_value = int(delta)
-        except (TypeError, ValueError):
-            continue
-        if delta_value < 0:
-            delta_value = abs(delta_value)
+        meta = entry.meta or {}
+
+        def _parse_int(value: Any) -> Optional[int]:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        inbound_delta = 0
+        outbound_delta = 0
         if entry.action == "in":
-            bucket["inbound"] += delta_value
+            delta_value = _parse_int(meta.get("delta"))
+            if delta_value is None:
+                continue
+            inbound_delta = abs(delta_value)
+        elif entry.action == "out":
+            delta_value = _parse_int(meta.get("delta"))
+            if delta_value is None:
+                continue
+            outbound_delta = abs(delta_value)
+        elif entry.action == "set":
+            delta_value = _parse_int(meta.get("delta"))
+            if delta_value in (None, 0):
+                continue
+            if delta_value > 0:
+                inbound_delta = delta_value
+            else:
+                outbound_delta = abs(delta_value)
+        elif entry.action == "create":
+            quantity_value = _parse_int(meta.get("quantity"))
+            if quantity_value is None or quantity_value <= 0:
+                continue
+            inbound_delta = quantity_value
         else:
-            bucket["outbound"] += delta_value
+            continue
+
+        bucket["inbound"] += inbound_delta
+        bucket["outbound"] += outbound_delta
     rows: List[Dict[str, Any]] = []
     for bucket in sorted(buckets.values(), key=lambda item: item["sort_key"]):
         rows.append(

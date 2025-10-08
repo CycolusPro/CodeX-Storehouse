@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from inventory_app.app import _history_statistics
 from inventory_app.inventory import InventoryHistoryEntry, InventoryManager
 
 
@@ -148,6 +149,25 @@ def test_history_logging(tmp_path: Path) -> None:
     assert isinstance(latest_entry, InventoryHistoryEntry)
     assert latest_entry.action == "delete"
     assert latest_entry.meta["previous_quantity"] == 12
+
+
+def test_history_statistics_counts_create_and_set(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    history_path = tmp_path / "history.jsonl"
+    manager = InventoryManager(storage, history_path=history_path)
+
+    manager.set_quantity("样品", 10)
+    manager.set_quantity("样品", 18)
+    manager.set_quantity("样品", 12)
+
+    entries = manager.list_history()
+    rows = _history_statistics(entries)
+
+    assert rows
+    stats = rows[0]
+    assert stats["inbound"] == 18
+    assert stats["outbound"] == 6
+    assert stats["net"] == 12
 
 
 def test_history_limit(tmp_path: Path) -> None:
