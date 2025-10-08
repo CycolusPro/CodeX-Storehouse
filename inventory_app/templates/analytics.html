@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>出入库统计 · 库存控制中心</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: ['class'],
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
+            },
+            colors: {
+              brand: {
+                50: '#F4F6FF',
+                100: '#E9EDFF',
+                200: '#C7D0FF',
+                300: '#A4B4FF',
+                400: '#8097FF',
+                500: '#5D7BFF',
+                600: '#3A5EFF',
+                700: '#2447E6',
+                800: '#1B34B0',
+                900: '#14257F'
+              }
+            },
+            boxShadow: {
+              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)'
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root { color-scheme: light dark; }
+      html, body { height: 100%; }
+    </style>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <header class="sticky top-0 z-40 border-b border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/70 backdrop-blur">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+        <a href="{{ url_for('index') }}" class="flex items-center gap-2 font-semibold tracking-tight">
+          <svg class="w-5 h-5 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span>库存控制中心</span>
+        </a>
+        <div class="flex-1"></div>
+        <div class="hidden md:flex items-center gap-2 text-sm">
+          <a href="{{ url_for('index') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">库存总览</a>
+          <a href="{{ url_for('analytics_dashboard') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
+          {% if permissions.can_manage_users %}
+            <a href="{{ url_for('manage_users') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+          {% endif %}
+          <div class="text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {{ current_user.username }}
+            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
+          </div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+          </form>
+          <button data-theme-toggle class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
+            <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="md:hidden flex items-center gap-2">
+          <button data-theme-toggle class="h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10" aria-label="切换主题">
+            <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="md:hidden border-t border-slate-200/60 dark:border-white/10">
+        <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap gap-2 text-sm items-center">
+          <a href="{{ url_for('index') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">库存总览</a>
+          <span class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</span>
+          {% if permissions.can_manage_users %}
+            <a href="{{ url_for('manage_users') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">用户管理</a>
+          {% endif %}
+          <div class="text-slate-500 dark:text-slate-300">{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">退出</button>
+          </form>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      <section class="grid gap-6 lg:grid-cols-3">
+        <div class="lg:col-span-2 p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/40 dark:border-white/10 text-slate-600 dark:text-slate-300">统计分析</span>
+              <h1 class="mt-2 text-2xl font-bold tracking-tight">出入库统计</h1>
+              <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">统计区间：{{ range_label }}</p>
+            </div>
+            <form method="get" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end w-full md:w-auto">
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+                统计方式
+                <select name="mode" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm">
+                  <option value="month" {% if mode != 'day' %}selected{% endif %}>按月汇总</option>
+                  <option value="day" {% if mode == 'day' %}selected{% endif %}>按日汇总</option>
+                </select>
+              </label>
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+                起始日期
+                <input type="date" name="start" value="{{ start_value }}" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm" />
+              </label>
+              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1">
+                截止日期
+                <input type="date" name="end" value="{{ end_value }}" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm" />
+              </label>
+              <div class="flex gap-2">
+                <button type="submit" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl bg-brand-600 text-white text-sm hover:brightness-105">更新</button>
+                <a href="{{ export_url }}" class="flex-1 inline-flex items-center justify-center h-10 rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm hover:bg-brand-500/10">导出 CSV</a>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
+            <div class="text-xs text-slate-500 dark:text-slate-400">入库总量</div>
+            <div class="mt-2 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</div>
+          </div>
+          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
+            <div class="text-xs text-slate-500 dark:text-slate-400">出库总量</div>
+            <div class="mt-2 text-2xl font-semibold text-amber-600 dark:text-amber-400">{{ totals.outbound }}</div>
+          </div>
+          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
+            <div class="text-xs text-slate-500 dark:text-slate-400">净变动</div>
+            <div class="mt-2 text-2xl font-semibold text-brand-600">{{ totals.net }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft overflow-x-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold tracking-tight">数据明细</h2>
+          <span class="text-xs text-slate-400">共 {{ stats_rows|length }} 条</span>
+        </div>
+        {% if has_data %}
+          <table class="min-w-full divide-y divide-slate-200/60 dark:divide-white/10 text-sm">
+            <thead class="bg-slate-100/60 dark:bg-white/5">
+              <tr>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">时间</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">入库数量</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">出库数量</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">净变动</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200/60 dark:divide-white/10">
+              {% for row in stats_rows %}
+                <tr>
+                  <td class="px-4 py-2 whitespace-nowrap">{{ row.label }}</td>
+                  <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ row.inbound }}</td>
+                  <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ row.outbound }}</td>
+                  <td class="px-4 py-2 text-brand-600">{{ row.net }}</td>
+                </tr>
+              {% endfor %}
+              <tr class="bg-slate-100/40 dark:bg-white/10 font-medium">
+                <td class="px-4 py-2">合计</td>
+                <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</td>
+                <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ totals.outbound }}</td>
+                <td class="px-4 py-2 text-brand-600">{{ totals.net }}</td>
+              </tr>
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-sm text-slate-500 dark:text-slate-400">当前暂无数据，尝试调整统计时间范围。</p>
+        {% endif %}
+      </section>
+    </main>
+
+    <script>
+      const root = document.documentElement;
+      const getTheme = () => localStorage.getItem('theme');
+      const setTheme = t => localStorage.setItem('theme', t);
+      const applyTheme = t => root.classList.toggle('dark', t === 'dark');
+      const initTheme = () => { const t = getTheme(); if (t) applyTheme(t); else if (window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark'); };
+      initTheme();
+      document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const next = root.classList.contains('dark') ? 'light' : 'dark';
+          applyTheme(next);
+          setTheme(next);
+        });
+      });
+    </script>
+  </body>
+</html>

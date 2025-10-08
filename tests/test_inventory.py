@@ -1,4 +1,6 @@
 from io import BytesIO
+import csv
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -198,6 +200,77 @@ def test_history_api_endpoint(tmp_path: Path) -> None:
     assert "action" in payload[0]
 
 
+def test_history_export_csv_format(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    _login(client)
+
+    client.post(
+        "/api/items",
+        json={"name": "咖啡豆", "quantity": 5, "unit": "袋"},
+    )
+    client.post("/api/items/咖啡豆/in", json={"quantity": 3})
+    client.post("/api/items/咖啡豆/out", json={"quantity": 2})
+
+    response = client.get("/api/history/export")
+    assert response.status_code == 200
+
+    text = response.data.decode("utf-8-sig")
+    reader = csv.DictReader(StringIO(text))
+    assert reader.fieldnames == ["时间", "操作类型", "SKU 名称", "操作用户"]
+    rows = list(reader)
+    assert rows
+    latest = rows[0]
+    assert latest["SKU 名称"] == "咖啡豆"
+    assert latest["操作类型"] in {"入库", "出库", "新增", "盘点", "删除"}
+    assert latest["操作用户"] == "admin"
+
+
+def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    _login(client)
+
+    client.post(
+        "/api/items",
+        json={"name": "纸箱", "quantity": 20, "unit": "箱"},
+    )
+    client.post("/api/items/纸箱/in", json={"quantity": 5})
+    client.post("/api/items/纸箱/out", json={"quantity": 4})
+
+    dashboard = client.get("/analytics?mode=day")
+    assert dashboard.status_code == 200
+    html = dashboard.data.decode("utf-8")
+    assert "出入库统计" in html
+    assert "数据明细" in html
+
+    export_response = client.get("/api/history/stats/export?mode=day")
+    assert export_response.status_code == 200
+    export_text = export_response.data.decode("utf-8-sig")
+    export_reader = csv.DictReader(StringIO(export_text))
+    assert export_reader.fieldnames == ["时间", "入库数量", "出库数量", "净变动"]
+    export_rows = list(export_reader)
+    assert export_rows
+    totals_row = export_rows[-1]
+    assert totals_row["时间"] == "合计"
+    inbound_total = int(totals_row["入库数量"])
+    outbound_total = int(totals_row["出库数量"])
+    assert inbound_total >= 0
+    assert outbound_total >= 0
+
+
 def test_manager_import_and_export(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
@@ -275,8 +348,9 @@ def test_history_export_endpoint(tmp_path: Path) -> None:
     text = export_resp.data.decode("utf-8-sig")
     lines = [line for line in text.splitlines() if line]
     assert lines
-    assert "timestamp,action,name,details,meta" == lines[0]
+    assert lines[0] == "时间,操作类型,SKU 名称,操作用户"
     assert any("咖啡豆" in line for line in lines[1:])
+    assert any("入库" in line or "出库" in line for line in lines[1:])
 
 
 def test_import_form_endpoint(tmp_path: Path) -> None:
