@@ -49,10 +49,10 @@
         </a>
         <div class="flex-1"></div>
         <div class="hidden md:flex items-center gap-2 text-sm">
-          <a href="{{ url_for('index') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">库存总览</a>
-          <a href="{{ url_for('analytics_dashboard') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
+          <a href="{{ url_for('index') }}" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">库存总览</a>
+          <a href="{{ url_for('analytics_dashboard') }}" class="h-10 px-3 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
           {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="inline-flex items-center justify-center h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
+            <a href="{{ url_for('manage_users') }}" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
           {% endif %}
           <div class="text-slate-600 dark:text-slate-300 whitespace-nowrap">
             {{ current_user.username }}
