@@ -377,11 +377,19 @@ def create_app(
         selected_category = _resolve_category_id(request.args.get("category"))
         stores = _list_stores()
         categories = _list_categories()
+        all_items = manager.list_items(
+            store_id=selected_store, category_id=selected_category
+        ).values()
+
+        def _is_low_stock(item: InventoryItem) -> bool:
+            return item.threshold is not None and item.quantity <= item.threshold
+
         items = sorted(
-            manager.list_items(
-                store_id=selected_store, category_id=selected_category
-            ).values(),
-            key=lambda item: item.name,
+            all_items,
+            key=lambda item: (
+                not _is_low_stock(item),
+                item.name.casefold(),
+            ),
         )
         total_quantity = sum(item.quantity for item in items)
         latest_in = _latest_timestamp(items, key="last_in")
