@@ -265,12 +265,20 @@
 {% for item in items %}
               {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
               {% set category_info = categories.get(item.category) %}
-              <div class="px-5 py-5 transition hover:bg-slate-50/80 dark:hover:bg-white/5 {% if is_low %}bg-red-50/80 dark:bg-red-500/10 border-l-4 border-red-400/60{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
+              <div class="px-5 py-5 transition hover:bg-slate-50/80 dark:hover:bg-white/5 {% if is_low %}bg-red-50/80 dark:bg-red-500/10 border-l-4 border-red-400/60 ring-1 ring-inset ring-red-400/40 dark:ring-red-400/30{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
                 <form class="grid grid-cols-1 gap-4 items-start lg:grid-cols-12 lg:items-end" method="post" action="/submit">
                   <div class="lg:col-span-4">
                     <div class="flex items-start md:items-center justify-between gap-3">
                       <div class="min-w-0">
-                        <div class="font-medium truncate" title="{{ item.name }}">{{ item.name }}</div>
+                        <div class="flex items-center gap-2">
+                          <div class="font-medium truncate" title="{{ item.name }}">{{ item.name }}</div>
+                          {% if is_low %}
+                            <span class="inline-flex items-center gap-1 text-[11px] leading-4 font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-200 border border-red-500/30">
+                              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="m10.29 3.86-8 13.86A1.93 1.93 0 0 0 4 20h16a1.93 1.93 0 0 0 1.71-2.28l-8-13.86a2 2 0 0 0-3.42 0Z"/></svg>
+                              库存预警
+                            </span>
+                          {% endif %}
+                        </div>
                         <div class="text-xs text-slate-500 mt-1">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
                         <div class="text-xs text-slate-500">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
                         {% if item.threshold is not none %}
