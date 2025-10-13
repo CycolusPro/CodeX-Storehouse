@@ -691,8 +691,9 @@ def create_app(
         selected_store = _resolve_store_id(request.args.get("store"))
         stores_map = _list_stores()
         mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(
-            request.args
+            request.args, mode_hint="sku"
         )
+        mode = "sku"
         entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         total_inbound = sum(row["inbound"] for row in stats_rows)
@@ -731,12 +732,17 @@ def create_app(
     @role_required("admin", "super_admin")
     def export_history_stats() -> Response:
         selected_store = _resolve_store_id(request.args.get("store_id"))
-        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(request.args)
+        mode, start_dt, end_dt, start_value, end_value = _resolve_history_filters(
+            request.args, mode_hint="sku"
+        )
+        mode = "sku"
         entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         csv_rows = [
             {
-                "时间": row["label"],
+                "SKU 名称": row.get("sku") or row.get("label", ""),
+                "分类": row.get("category", ""),
+                "单位": row.get("unit", ""),
                 "入库数量": row["inbound"],
                 "出库数量": row["outbound"],
                 "净变动": row["net"],
@@ -746,7 +752,9 @@ def create_app(
         if not csv_rows:
             csv_rows.append(
                 {
-                    "时间": f"{start_value} 至 {end_value}",
+                    "SKU 名称": "（无数据）",
+                    "分类": "",
+                    "单位": "",
                     "入库数量": 0,
                     "出库数量": 0,
                     "净变动": 0,
@@ -757,14 +765,24 @@ def create_app(
             total_outbound = sum(row["出库数量"] for row in csv_rows)
             csv_rows.append(
                 {
-                    "时间": "合计",
+                    "SKU 名称": "合计",
+                    "分类": "",
+                    "单位": "",
                     "入库数量": total_inbound,
                     "出库数量": total_outbound,
                     "净变动": total_inbound - total_outbound,
                 }
             )
-        fieldnames = ["时间", "入库数量", "出库数量", "净变动"]
-        content = _rows_to_csv(fieldnames, csv_rows)
+        fieldnames = ["SKU 名称", "分类", "单位", "入库数量", "出库数量", "净变动"]
+        stores_map = _list_stores()
+        store_name = stores_map.get(selected_store, {}).get("name", selected_store)
+        range_label = f"{start_value} 至 {end_value}" if start_value or end_value else "—"
+        metadata = [
+            ("门店", store_name),
+            ("统计时间范围", range_label),
+            ("导出时间", datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")),
+        ]
+        content = _rows_to_csv(fieldnames, csv_rows, metadata=metadata)
         filename = _timestamped_filename("inventory_history_stats")
         return _csv_response(content, filename)
 
@@ -984,9 +1002,19 @@ def _parse_threshold_value(value: Any) -> Optional[int]:
     return parsed
 
 
-def _rows_to_csv(fieldnames: Sequence[str], rows: Iterable[Dict[str, Any]]) -> str:
+def _rows_to_csv(
+    fieldnames: Sequence[str],
+    rows: Iterable[Dict[str, Any]],
+    *,
+    metadata: Optional[Sequence[tuple[str, Any]]] = None,
+) -> str:
     buffer = StringIO()
     buffer.write("\ufeff")
+    if metadata:
+        meta_writer = csv.writer(buffer)
+        for key, value in metadata:
+            meta_writer.writerow([key, "" if value is None else value])
+        meta_writer.writerow([])
     writer = csv.DictWriter(buffer, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
@@ -1121,14 +1149,24 @@ def _parse_date_arg(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _resolve_history_filters(args: Mapping[str, str], mode_hint: Optional[str] = None) -> tuple[str, Optional[datetime], Optional[datetime], str, str]:
-    mode_raw = mode_hint or args.get("mode", "month")
-    mode = "day" if mode_raw == "day" else "month"
+def _resolve_history_filters(
+    args: Mapping[str, str], mode_hint: Optional[str] = None
+) -> tuple[str, Optional[datetime], Optional[datetime], str, str]:
+    mode_raw = (mode_hint or args.get("mode") or "sku").lower()
+    if mode_raw == "day":
+        mode = "day"
+    elif mode_raw == "month":
+        mode = "month"
+    else:
+        mode = "sku"
     start_raw = args.get("start")
     end_raw = args.get("end")
     today_local = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
     today = today_local.replace(tzinfo=None)
-    span = timedelta(days=13) if mode == "day" else timedelta(days=180)
+    if mode == "day":
+        span = timedelta(days=13)
+    else:
+        span = timedelta(days=180)
     default_start = today - span
     start_dt = _parse_date_arg(start_raw) or default_start
     end_dt = _parse_date_arg(end_raw) or today
@@ -1143,11 +1181,11 @@ def _resolve_history_filters(args: Mapping[str, str], mode_hint: Optional[str] =
 def _history_statistics(
     entries: Iterable[InventoryHistoryEntry],
     *,
-    mode: str = "month",
+    mode: str = "sku",
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    normalized_mode = "day" if mode == "day" else "month"
+    normalized_mode = "sku" if mode == "sku" else "day" if mode == "day" else "month"
     buckets: Dict[str, Dict[str, Any]] = {}
     for entry in entries:
         local_time = entry.timestamp.astimezone()
@@ -1156,16 +1194,7 @@ def _history_statistics(
             continue
         if end and naive_time >= end:
             continue
-        if normalized_mode == "day":
-            label = local_time.strftime("%Y-%m-%d")
-            sort_key = datetime(local_time.year, local_time.month, local_time.day)
-        else:
-            label = local_time.strftime("%Y-%m")
-            sort_key = datetime(local_time.year, local_time.month, 1)
-        bucket = buckets.setdefault(
-            label,
-            {"label": label, "inbound": 0, "outbound": 0, "sort_key": sort_key},
-        )
+
         meta = entry.meta or {}
 
         def _parse_int(value: Any) -> Optional[int]:
@@ -1202,19 +1231,98 @@ def _history_statistics(
         else:
             continue
 
+        if normalized_mode == "day":
+            label = local_time.strftime("%Y-%m-%d")
+            sort_key = datetime(local_time.year, local_time.month, local_time.day)
+            bucket = buckets.setdefault(
+                label,
+                {
+                    "label": label,
+                    "inbound": 0,
+                    "outbound": 0,
+                    "sort_key": sort_key,
+                },
+            )
+        elif normalized_mode == "month":
+            label = local_time.strftime("%Y-%m")
+            sort_key = datetime(local_time.year, local_time.month, 1)
+            bucket = buckets.setdefault(
+                label,
+                {
+                    "label": label,
+                    "inbound": 0,
+                    "outbound": 0,
+                    "sort_key": sort_key,
+                },
+            )
+        else:
+            sku_name = (entry.name or "").strip() or "未命名 SKU"
+            label = sku_name
+            bucket = buckets.setdefault(
+                label,
+                {
+                    "label": label,
+                    "sku": sku_name,
+                    "unit": "",
+                    "category": "",
+                    "store_name": "",
+                    "inbound": 0,
+                    "outbound": 0,
+                    "last_activity": None,
+                },
+            )
+            unit = str(meta.get("unit") or "").strip()
+            if unit:
+                bucket["unit"] = unit
+            category_name = str(meta.get("category_name") or meta.get("category_id") or "").strip()
+            if category_name:
+                bucket["category"] = category_name
+            store_name = str(meta.get("store_name") or meta.get("store_id") or "").strip()
+            if store_name:
+                bucket["store_name"] = store_name
+
         bucket["inbound"] += inbound_delta
         bucket["outbound"] += outbound_delta
+        if normalized_mode == "sku":
+            last_activity = bucket.get("last_activity")
+            if last_activity is None or naive_time > last_activity:
+                bucket["last_activity"] = naive_time
+
     rows: List[Dict[str, Any]] = []
-    for bucket in sorted(buckets.values(), key=lambda item: item["sort_key"]):
-        rows.append(
-            {
-                "label": bucket["label"],
-                "inbound": bucket["inbound"],
-                "outbound": bucket["outbound"],
-                "net": bucket["inbound"] - bucket["outbound"],
-            }
+    if normalized_mode == "sku":
+        for bucket in buckets.values():
+            rows.append(
+                {
+                    "label": bucket["label"],
+                    "sku": bucket["sku"],
+                    "category": bucket.get("category", ""),
+                    "unit": bucket.get("unit", ""),
+                    "store_name": bucket.get("store_name", ""),
+                    "inbound": bucket["inbound"],
+                    "outbound": bucket["outbound"],
+                    "net": bucket["inbound"] - bucket["outbound"],
+                    "last_activity": bucket.get("last_activity"),
+                }
+            )
+        rows.sort(
+            key=lambda item: (
+                -(item["inbound"] + item["outbound"]),
+                item["sku"].lower(),
+            )
         )
+    else:
+        for bucket in sorted(buckets.values(), key=lambda item: item["sort_key"]):
+            rows.append(
+                {
+                    "label": bucket["label"],
+                    "inbound": bucket["inbound"],
+                    "outbound": bucket["outbound"],
+                    "net": bucket["inbound"] - bucket["outbound"],
+                }
+            )
     return rows
+
+
 def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> list[Dict[str, Any]]:
     def _unit_suffix(unit: str) -> str:
         return f" {unit}" if unit else ""

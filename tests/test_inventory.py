@@ -336,21 +336,40 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
     client.post("/api/items/纸箱/in", json={"quantity": 5})
     client.post("/api/items/纸箱/out", json={"quantity": 4})
 
-    dashboard = client.get("/analytics?mode=day")
+    dashboard = client.get("/analytics?mode=sku")
     assert dashboard.status_code == 200
     html = dashboard.data.decode("utf-8")
     assert "出入库统计" in html
     assert "数据明细" in html
 
-    export_response = client.get("/api/history/stats/export?mode=day")
+    export_response = client.get("/api/history/stats/export?mode=sku")
     assert export_response.status_code == 200
     export_text = export_response.data.decode("utf-8-sig")
-    export_reader = csv.DictReader(StringIO(export_text))
-    assert export_reader.fieldnames == ["时间", "入库数量", "出库数量", "净变动"]
-    export_rows = list(export_reader)
+    export_stream = StringIO(export_text)
+    raw_reader = csv.reader(export_stream)
+    metadata_rows = []
+    for row in raw_reader:
+        if not row:
+            break
+        metadata_rows.append(row)
+    assert metadata_rows
+    metadata = {row[0]: row[1] if len(row) > 1 else "" for row in metadata_rows}
+    assert "门店" in metadata
+    assert metadata.get("统计时间范围")
+    assert metadata.get("导出时间")
+    header = next(raw_reader)
+    assert header == [
+        "SKU 名称",
+        "分类",
+        "单位",
+        "入库数量",
+        "出库数量",
+        "净变动",
+    ]
+    export_rows = [dict(zip(header, row)) for row in raw_reader if any(row)]
     assert export_rows
     totals_row = export_rows[-1]
-    assert totals_row["时间"] == "合计"
+    assert totals_row["SKU 名称"] == "合计"
     inbound_total = int(totals_row["入库数量"])
     outbound_total = int(totals_row["出库数量"])
     assert inbound_total >= 0
