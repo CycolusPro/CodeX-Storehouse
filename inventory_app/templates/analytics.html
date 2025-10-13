@@ -100,20 +100,14 @@
               <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">统计区间：{{ range_label }}</p>
               <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前门店：{{ selected_store_name }}</p>
             </div>
-            <form method="get" class="grid w-full md:w-auto gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end text-sm">
+            <form method="get" class="grid w-full md:w-auto gap-3 sm:grid-cols-2 lg:grid-cols-5 items-end text-sm">
+              <input type="hidden" name="mode" value="sku" />
               <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
                 门店
                 <select name="store" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium min-w-0">
                   {% for store_id, store in stores.items() %}
                     <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
                   {% endfor %}
-                </select>
-              </label>
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
-                统计方式
-                <select name="mode" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium min-w-0">
-                  <option value="month" {% if mode != 'day' %}selected{% endif %}>按月汇总</option>
-                  <option value="day" {% if mode == 'day' %}selected{% endif %}>按日汇总</option>
                 </select>
               </label>
               <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
@@ -156,7 +150,9 @@
           <table class="min-w-full divide-y divide-slate-200/60 dark:divide-white/10 text-sm">
             <thead class="bg-slate-100/60 dark:bg-white/5">
               <tr>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">时间</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">SKU 名称</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">分类</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">单位</th>
                 <th class="px-4 py-2 text-left font-medium text-slate-500">入库数量</th>
                 <th class="px-4 py-2 text-left font-medium text-slate-500">出库数量</th>
                 <th class="px-4 py-2 text-left font-medium text-slate-500">净变动</th>
@@ -165,7 +161,9 @@
             <tbody class="divide-y divide-slate-200/60 dark:divide-white/10">
               {% for row in stats_rows %}
                 <tr>
-                  <td class="px-4 py-2 whitespace-nowrap">{{ row.label }}</td>
+                  <td class="px-4 py-2 whitespace-nowrap">{{ row.sku }}</td>
+                  <td class="px-4 py-2 whitespace-nowrap text-slate-500 dark:text-slate-400">{{ row.category or '—' }}</td>
+                  <td class="px-4 py-2 whitespace-nowrap text-slate-500 dark:text-slate-400">{{ row.unit or '—' }}</td>
                   <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ row.inbound }}</td>
                   <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ row.outbound }}</td>
                   <td class="px-4 py-2 text-brand-600">{{ row.net }}</td>
@@ -173,6 +171,8 @@
               {% endfor %}
               <tr class="bg-slate-100/40 dark:bg-white/10 font-medium">
                 <td class="px-4 py-2">合计</td>
+                <td class="px-4 py-2 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-2 text-slate-500 dark:text-slate-400">—</td>
                 <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</td>
                 <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ totals.outbound }}</td>
                 <td class="px-4 py-2 text-brand-600">{{ totals.net }}</td>
