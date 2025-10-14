@@ -520,6 +520,42 @@ def create_app(
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
 
+    @app.post("/api/items/<string:name>/transfer")
+    @role_required("admin", "super_admin")
+    def transfer_item_api(name: str) -> Any:
+        payload = _get_payload(request)
+        try:
+            quantity = int(payload.get("quantity", 0))
+        except (TypeError, ValueError):
+            return {"error": "Invalid quantity"}, 400
+        if quantity <= 0:
+            return {"error": "Quantity must be greater than zero"}, 400
+        source_store_id = _resolve_store_id(payload.get("source_store_id"))
+        target_store_id = payload.get("target_store_id")
+        stores_map = _list_stores()
+        if not target_store_id or target_store_id not in stores_map:
+            return {"error": "Invalid target store"}, 400
+        if source_store_id == target_store_id:
+            return {"error": "Source and target stores must differ"}, 400
+        try:
+            source_item, target_item = manager.transfer_item(
+                name,
+                quantity,
+                source_store_id=source_store_id,
+                target_store_id=target_store_id,
+                user=_current_username(),
+            )
+        except KeyError as exc:
+            return {"error": str(exc)}, 404
+        except ValueError as exc:
+            return {"error": str(exc)}, 400
+        return jsonify(
+            {
+                "source": source_item.to_dict(),
+                "target": target_item.to_dict(),
+            }
+        )
+
     @app.delete("/api/items/<string:name>")
     @role_required("admin", "super_admin")
     def delete_item(name: str) -> Any:
@@ -621,6 +657,12 @@ def create_app(
             new_quantity = _parse_int(meta.get("new_quantity"))
             delta_value = _parse_int(meta.get("delta"))
             quantity_value = _parse_int(meta.get("quantity"))
+            operation_label = action_labels.get(entry.action, entry.action or "—")
+            if meta.get("transfer"):
+                if entry.action == "in":
+                    operation_label = "调拨入库"
+                elif entry.action == "out":
+                    operation_label = "调拨出库"
 
             initial_quantity = previous_quantity
             current_quantity = new_quantity
@@ -670,7 +712,7 @@ def create_app(
             rows.append(
                 {
                     "时间": local_time,
-                    "操作类型": action_labels.get(entry.action, entry.action or "—"),
+                    "操作类型": operation_label,
                     "SKU 名称": entry.name,
                     "操作用户": user,
                     "门店": store_name,
@@ -913,6 +955,7 @@ def create_app(
         username = _current_username()
         selected_store = _resolve_store_id(request.form.get("store_id"))
         category_id = request.form.get("category") or None
+        target_store_id = request.form.get("target_store_id") or None
 
         if action == "create":
             if not permissions["can_manage_items"]:
@@ -967,6 +1010,22 @@ def create_app(
             try:
                 manager.delete_item(name, store_id=selected_store, user=username)
             except KeyError:
+                pass
+        elif action == "transfer":
+            if not permissions["can_manage_items"] or quantity is None or quantity <= 0:
+                return redirect(url_for("index"))
+            stores_map = _list_stores()
+            if not target_store_id or target_store_id not in stores_map:
+                return redirect(url_for("index"))
+            try:
+                manager.transfer_item(
+                    name,
+                    quantity,
+                    source_store_id=selected_store,
+                    target_store_id=target_store_id,
+                    user=username,
+                )
+            except (ValueError, KeyError):
                 pass
         return redirect(url_for("index"))
 
@@ -1378,6 +1437,13 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
                 details.append(f"数量 +{delta}{suffix}".strip())
             if new_quantity is not None:
                 details.append(f"现有库存 {new_quantity}{suffix}".strip())
+            if meta.get("transfer"):
+                label = "调入"
+                source_store = meta.get("transfer_source_name") or meta.get(
+                    "transfer_source_id"
+                )
+                if source_store:
+                    details.append(f"来源门店：{source_store}")
         elif entry.action == "out":
             badge = "warning"
             label = "出库"
@@ -1387,6 +1453,13 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
                 details.append(f"数量 -{delta}{suffix}".strip())
             if new_quantity is not None:
                 details.append(f"现有库存 {new_quantity}{suffix}".strip())
+            if meta.get("transfer"):
+                label = "调出"
+                target_store = meta.get("transfer_target_name") or meta.get(
+                    "transfer_target_id"
+                )
+                if target_store:
+                    details.append(f"调往门店：{target_store}")
         elif entry.action == "delete":
             badge = "danger"
             label = "删除"

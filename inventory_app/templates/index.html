@@ -347,6 +347,9 @@
                     {% if permissions.can_adjust_out %}
                       <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
                     {% endif %}
+                    {% if permissions.can_manage_items and stores|length > 1 %}
+                      <button class="px-3 py-2 rounded-lg border border-cyan-500/40 text-cyan-600 hover:bg-cyan-500/10" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
+                    {% endif %}
                     {% if permissions.can_manage_items %}
                       <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
                       <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
@@ -517,6 +520,41 @@
         </form>
       </div>
     </div>
+
+    {% if permissions.can_manage_items and stores|length > 1 %}
+    <!-- Transfer Modal -->
+    <div id="transferModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
+      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
+      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">SKU 调拨</h2>
+          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+        </div>
+        <div class="mt-2 text-sm text-slate-500" id="transferInfo"></div>
+        <form id="transferForm" method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
+          <input type="hidden" name="action" value="transfer">
+          <input type="hidden" name="name" id="transferName">
+          <input type="hidden" name="store_id" id="transferSourceStore" value="{{ selected_store }}">
+          <label class="grid gap-1 text-sm">
+            <span class="text-slate-500">目标门店</span>
+            <select class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="transferTargetStore" name="target_store_id" required>
+              {% for store_id, store in stores.items() %}
+                <option value="{{ store_id }}">{{ store.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="grid gap-1 text-sm">
+            <span class="text-slate-500">调拨数量</span>
+            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="transferQuantity" name="quantity" type="number" min="1" step="1" required>
+          </label>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
+            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105" id="transferSubmitBtn">确认调拨</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
 
 
     <!-- Store Management Modal -->
@@ -700,6 +738,69 @@
             setTimeout(() => {
               if(!adjustQuantityInput.disabled){
                 adjustQuantityInput.focus();
+              }
+            }, 120);
+          });
+        });
+      })();
+
+      (function setupTransferModal(){
+        const transferModal = document.getElementById('transferModal');
+        if(!transferModal) return;
+        const transferButtons = document.querySelectorAll('[data-transfer]');
+        if(!transferButtons.length) return;
+        const transferNameInput = document.getElementById('transferName');
+        const transferSourceInput = document.getElementById('transferSourceStore');
+        const transferTargetSelect = document.getElementById('transferTargetStore');
+        const transferQuantityInput = document.getElementById('transferQuantity');
+        const transferInfo = document.getElementById('transferInfo');
+        const transferSubmitBtn = document.getElementById('transferSubmitBtn');
+        transferButtons.forEach(button => {
+          button.addEventListener('click', () => {
+            const name = button.getAttribute('data-name') || '';
+            const unit = button.getAttribute('data-unit') || '';
+            const current = Number(button.getAttribute('data-current') || '0');
+            const storeId = button.getAttribute('data-store') || '';
+            const storeName = button.getAttribute('data-store-name') || '';
+            transferNameInput.value = name;
+            transferSourceInput.value = storeId;
+            let firstAvailable = null;
+            Array.from(transferTargetSelect.options).forEach(option => {
+              const isSame = option.value === storeId;
+              option.disabled = isSame;
+              if(isSame && option.selected){
+                option.selected = false;
+              }
+              if(!isSame && !firstAvailable){
+                firstAvailable = option;
+              }
+            });
+            if((!transferTargetSelect.value || transferTargetSelect.options[transferTargetSelect.selectedIndex]?.disabled) && firstAvailable){
+              firstAvailable.selected = true;
+            }
+            transferQuantityInput.value = '';
+            const unitSuffix = unit ? ` ${unit}` : '';
+            let infoText = `${name} · 当前库存 ${current}${unitSuffix}`;
+            if(storeName){
+              infoText += ` · 调出门店：${storeName}`;
+            }
+            if(current > 0){
+              transferQuantityInput.max = String(current);
+              transferQuantityInput.disabled = false;
+              transferSubmitBtn.disabled = false;
+              transferQuantityInput.placeholder = `最多可调拨 ${current}${unitSuffix}`.trim();
+            } else {
+              transferQuantityInput.removeAttribute('max');
+              transferQuantityInput.disabled = true;
+              transferSubmitBtn.disabled = true;
+              transferQuantityInput.placeholder = '当前库存不足，无法调拨';
+              infoText += ' · 当前库存不足以调拨';
+            }
+            transferInfo.textContent = infoText;
+            openModal('#transferModal');
+            setTimeout(() => {
+              if(!transferQuantityInput.disabled){
+                transferQuantityInput.focus();
               }
             }, 120);
           });
