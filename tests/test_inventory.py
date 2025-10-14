@@ -78,6 +78,51 @@ def test_adjust_quantity_rejects_negative(tmp_path: Path) -> None:
         manager.adjust_quantity("螺丝", -3)
 
 
+def test_transfer_between_stores(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    history_path = tmp_path / "history.jsonl"
+    manager = InventoryManager(storage, history_path=history_path)
+
+    target_store = manager.create_store("分店A")
+    manager.set_quantity("咖啡豆", 10, unit="袋", threshold=2, store_id="default")
+
+    source_item, target_item = manager.transfer_item(
+        "咖啡豆",
+        4,
+        source_store_id="default",
+        target_store_id=target_store["id"],
+        user="tester",
+    )
+
+    assert source_item.quantity == 6
+    assert source_item.store_id == "default"
+    assert target_item.quantity == 4
+    assert target_item.store_id == target_store["id"]
+    assert target_item.unit == "袋"
+    assert target_item.threshold == 2
+
+    source_history = manager.list_history(store_id="default")
+    target_history = manager.list_history(store_id=target_store["id"])
+    assert any(entry.action == "out" and entry.meta.get("transfer") for entry in source_history)
+    assert any(entry.action == "in" and entry.meta.get("transfer") for entry in target_history)
+
+    with pytest.raises(ValueError):
+        manager.transfer_item(
+            "咖啡豆",
+            20,
+            source_store_id="default",
+            target_store_id=target_store["id"],
+        )
+
+    with pytest.raises(ValueError):
+        manager.transfer_item(
+            "咖啡豆",
+            1,
+            source_store_id="default",
+            target_store_id="default",
+        )
+
+
 def test_set_quantity_threshold_preservation(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)
@@ -374,6 +419,59 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
     outbound_total = int(totals_row["出库数量"])
     assert inbound_total >= 0
     assert outbound_total >= 0
+
+
+def test_transfer_api_endpoint(tmp_path: Path) -> None:
+    pytest.importorskip("flask")
+    from inventory_app.app import create_app
+
+    storage = tmp_path / "data.json"
+    app = create_app(storage)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    _login(client)
+
+    store_response = client.post("/stores", json={"name": "分店A"})
+    assert store_response.status_code == 201
+    store_payload = store_response.get_json()
+    target_store_id = store_payload["id"]
+
+    create_response = client.post(
+        "/api/items",
+        json={
+            "name": "咖啡豆",
+            "quantity": 8,
+            "unit": "袋",
+            "threshold": 2,
+            "store_id": "default",
+        },
+    )
+    assert create_response.status_code == 201
+
+    transfer_response = client.post(
+        "/api/items/咖啡豆/transfer",
+        json={
+            "quantity": 3,
+            "source_store_id": "default",
+            "target_store_id": target_store_id,
+        },
+    )
+    assert transfer_response.status_code == 200
+    transfer_payload = transfer_response.get_json()
+    assert transfer_payload["source"]["quantity"] == 5
+    assert transfer_payload["target"]["quantity"] == 3
+    assert transfer_payload["target"]["store_id"] == target_store_id
+
+    invalid_transfer = client.post(
+        "/api/items/咖啡豆/transfer",
+        json={
+            "quantity": 100,
+            "source_store_id": "default",
+            "target_store_id": target_store_id,
+        },
+    )
+    assert invalid_transfer.status_code == 400
 
 
 def test_manager_import_and_export(tmp_path: Path) -> None:

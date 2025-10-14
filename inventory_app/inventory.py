@@ -478,6 +478,134 @@ class InventoryManager:
             self._write_state_unlocked(state)
             return self._record_to_item(name, record, store_id=resolved_store)
 
+    def transfer_item(
+        self,
+        name: str,
+        quantity: int,
+        *,
+        source_store_id: Optional[str] = None,
+        target_store_id: Optional[str] = None,
+        user: Optional[str] = None,
+    ) -> Tuple[InventoryItem, InventoryItem]:
+        if quantity <= 0:
+            raise ValueError("Transfer quantity must be greater than zero")
+        with self._lock:
+            state = self._load_state_locked()
+            source_id = self._normalize_store_id(state, source_store_id)
+            target_id = self._normalize_store_id(state, target_store_id)
+            if source_id == target_id:
+                raise ValueError("Source and target stores must be different")
+            stores_state = state["stores"]
+            source_store = stores_state[source_id]
+            target_store = stores_state[target_id]
+            source_items = source_store.setdefault("items", {})
+            if name not in source_items:
+                raise KeyError(f"Item '{name}' not found in source store")
+            source_record = self._coerce_record(
+                source_items[name], default_category=_UNCATEGORIZED_ID
+            )
+            current_source_quantity = source_record["quantity"]
+            if quantity > current_source_quantity:
+                raise ValueError("Insufficient stock for transfer")
+
+            now = _now()
+            source_new_quantity = current_source_quantity - quantity
+            source_record["quantity"] = source_new_quantity
+            source_record["last_out"] = _serialize_timestamp(now)
+            source_record["last_out_delta"] = quantity
+
+            source_unit = source_record.get("unit", "")
+            source_category = source_record.get("category", _UNCATEGORIZED_ID)
+            source_threshold = source_record.get("threshold")
+
+            target_items = target_store.setdefault("items", {})
+            target_exists = name in target_items
+            target_record = self._coerce_record(
+                target_items.get(name), default_category=_UNCATEGORIZED_ID
+            )
+            previous_target_quantity = target_record["quantity"]
+            target_new_quantity = previous_target_quantity + quantity
+            target_record["quantity"] = target_new_quantity
+            target_record["last_in"] = _serialize_timestamp(now)
+            target_record["last_in_delta"] = quantity
+            if not target_exists:
+                target_record["created_at"] = _serialize_timestamp(now)
+                target_record["created_quantity"] = target_new_quantity
+            if not target_record.get("unit") and source_unit:
+                target_record["unit"] = source_unit
+            target_category = target_record.get("category") or source_category
+            target_record["category"] = target_category or _UNCATEGORIZED_ID
+            if source_threshold is not None:
+                if not target_exists or target_record.get("threshold") is None:
+                    target_record["threshold"] = source_threshold
+
+            source_items[name] = source_record
+            target_items[name] = target_record
+
+            categories = state["categories"]
+            source_category_entry = categories.get(
+                source_record.get("category", _UNCATEGORIZED_ID), {}
+            )
+            target_category_entry = categories.get(
+                target_record.get("category", _UNCATEGORIZED_ID), {}
+            )
+
+            source_meta: Dict[str, Any] = {
+                "previous_quantity": current_source_quantity,
+                "new_quantity": source_new_quantity,
+                "unit": source_record.get("unit", ""),
+                "store_id": source_id,
+                "store_name": source_store.get("name", source_id),
+                "category_id": source_record.get("category", _UNCATEGORIZED_ID),
+                "category_name": source_category_entry.get(
+                    "name", source_record.get("category", _UNCATEGORIZED_ID)
+                ),
+                "delta": quantity,
+                "transfer": True,
+                "transfer_target_id": target_id,
+                "transfer_target_name": target_store.get("name", target_id),
+            }
+            target_meta: Dict[str, Any] = {
+                "previous_quantity": previous_target_quantity,
+                "new_quantity": target_new_quantity,
+                "unit": target_record.get("unit", ""),
+                "store_id": target_id,
+                "store_name": target_store.get("name", target_id),
+                "category_id": target_record.get("category", _UNCATEGORIZED_ID),
+                "category_name": target_category_entry.get(
+                    "name", target_record.get("category", _UNCATEGORIZED_ID)
+                ),
+                "delta": quantity,
+                "transfer": True,
+                "transfer_source_id": source_id,
+                "transfer_source_name": source_store.get("name", source_id),
+            }
+            if user:
+                source_meta["user"] = user
+                target_meta["user"] = user
+
+            self._append_history_entry(
+                InventoryHistoryEntry(
+                    timestamp=now,
+                    action="out",
+                    name=name,
+                    meta=source_meta,
+                )
+            )
+            self._append_history_entry(
+                InventoryHistoryEntry(
+                    timestamp=now,
+                    action="in",
+                    name=name,
+                    meta=target_meta,
+                )
+            )
+
+            self._write_state_unlocked(state)
+            source_item = self._record_to_item(name, source_record, store_id=source_id)
+            target_item = self._record_to_item(name, target_record, store_id=target_id)
+            return source_item, target_item
+
     def delete_item(
         self,
         name: str,
