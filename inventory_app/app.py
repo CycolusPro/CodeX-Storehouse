@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping
@@ -472,18 +472,35 @@ def create_app(
         timeline_end = timeline_start + timeline_per_page
         timeline_entries = filtered_history[timeline_start:timeline_end]
         timeline = _recent_activity(timeline_entries, limit=None)
-        timeline_pagination = {
-            "page": timeline_page,
-            "per_page": timeline_per_page,
-            "total": timeline_total,
-            "pages": timeline_pages,
-            "has_prev": timeline_page > 1,
-            "has_next": timeline_page < timeline_pages,
-            "prev_page": max(1, timeline_page - 1),
-            "next_page": min(timeline_pages, timeline_page + 1),
-            "start_index": timeline_start + 1 if timeline_total else 0,
-            "end_index": min(timeline_end, timeline_total),
-        }
+        timeline_is_demo = False
+        if not timeline:
+            timeline = _demo_timeline_events()
+            timeline_is_demo = True
+            timeline_pagination = {
+                "page": 1,
+                "per_page": len(timeline) or timeline_per_page,
+                "total": len(timeline),
+                "pages": 1,
+                "has_prev": False,
+                "has_next": False,
+                "prev_page": 1,
+                "next_page": 1,
+                "start_index": 1 if timeline else 0,
+                "end_index": len(timeline),
+            }
+        else:
+            timeline_pagination = {
+                "page": timeline_page,
+                "per_page": timeline_per_page,
+                "total": timeline_total,
+                "pages": timeline_pages,
+                "has_prev": timeline_page > 1,
+                "has_next": timeline_page < timeline_pages,
+                "prev_page": max(1, timeline_page - 1),
+                "next_page": min(timeline_pages, timeline_page + 1),
+                "start_index": timeline_start + 1 if timeline_total else 0,
+                "end_index": min(timeline_end, timeline_total),
+            }
         timeline_sku_options = sorted({entry.name for entry in history_entries})
 
         preserved_query = {key: request.args.getlist(key) for key in request.args}
@@ -516,6 +533,7 @@ def create_app(
             preserved_query=preserved_query,
             build_query=build_query,
             inventory_search=inventory_search,
+            timeline_is_demo=timeline_is_demo,
         )
 
     @app.post("/history/clear")
@@ -1675,6 +1693,65 @@ def _recent_activity(
     if limit is not None:
         return events[:limit]
     return events
+
+
+def _demo_timeline_events() -> list[Dict[str, Any]]:
+    """Provide illustrative timeline events when no history exists."""
+
+    now = datetime.now(timezone.utc)
+    return [
+        {
+            "type": "入库",
+            "badge": "success",
+            "timestamp": now - timedelta(hours=2, minutes=15),
+            "name": "黑曜石深烘咖啡豆",
+            "user": "王雪",
+            "details": [
+                "数量 +80 袋",
+                "现有库存 230 袋",
+                "门店：旗舰店",
+                "分类：咖啡豆",
+            ],
+        },
+        {
+            "type": "出库",
+            "badge": "warning",
+            "timestamp": now - timedelta(hours=5, minutes=40),
+            "name": "燕麦奶",
+            "user": "陈刚",
+            "details": [
+                "数量 -24 箱",
+                "现有库存 96 箱",
+                "门店：旗舰店",
+                "分类：饮品原料",
+            ],
+        },
+        {
+            "type": "盘点",
+            "badge": "neutral",
+            "timestamp": now - timedelta(days=1, hours=1),
+            "name": "黑芝麻麻薯",
+            "user": "李敏",
+            "details": [
+                "库存 180 盒 → 172 盒",
+                "差值 -8",
+                "门店：旗舰店",
+                "分类：烘焙",
+            ],
+        },
+        {
+            "type": "新增",
+            "badge": "neutral",
+            "timestamp": now - timedelta(days=2, hours=3),
+            "name": "草莓奶昔基底",
+            "user": "系统",
+            "details": [
+                "初始数量 60 瓶",
+                "门店：旗舰店",
+                "分类：饮品原料",
+            ],
+        },
+    ]
 
 
 if __name__ == "__main__":
