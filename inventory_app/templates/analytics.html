@@ -1,199 +1,370 @@
 <!doctype html>
-<html lang="zh" data-theme="light">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>出入库统计 · 库存控制中心</title>
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: ['class'],
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
-            },
-            colors: {
-              brand: {
-                50: '#F4F6FF',
-                100: '#E9EDFF',
-                200: '#C7D0FF',
-                300: '#A4B4FF',
-                400: '#8097FF',
-                500: '#5D7BFF',
-                600: '#3A5EFF',
-                700: '#2447E6',
-                800: '#1B34B0',
-                900: '#14257F'
-              }
-            },
-            boxShadow: {
-              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)'
-            }
-          }
-        }
-      }
-    </script>
     <style>
-      :root { color-scheme: light dark; }
-      html, body { height: 100%; }
+      :root {
+        color-scheme: light dark;
+        --bg: #eef1f8;
+        --fg: #111827;
+        --muted: #6b7280;
+        --surface: rgba(255, 255, 255, 0.95);
+        --card: rgba(255,255,255,0.75);
+        --border: rgba(148, 163, 184, 0.35);
+        --accent: #2563eb;
+        --accent-soft: rgba(37, 99, 235, 0.14);
+        --shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+      }
+      :root.dark {
+        --bg: #0b1220;
+        --fg: #f8fafc;
+        --muted: #94a3b8;
+        --surface: rgba(15, 23, 42, 0.88);
+        --card: rgba(15, 23, 42, 0.72);
+        --border: rgba(148, 163, 184, 0.22);
+        --shadow: 0 20px 40px rgba(2, 6, 23, 0.65);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 45%), var(--bg);
+        color: var(--fg);
+      }
+      a { color: inherit; text-decoration: none; }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        backdrop-filter: blur(16px);
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .topbar {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .brand svg { width: 20px; height: 20px; }
+      nav {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .nav-link {
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 14px;
+        color: var(--muted);
+        border: 1px solid transparent;
+      }
+      .nav-link.active {
+        color: var(--fg);
+        border-color: var(--border);
+        background: var(--accent-soft);
+      }
+      .topbar__right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .theme-toggle {
+        border: 1px solid var(--border);
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: transparent;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      main {
+        max-width: 1100px;
+        margin: 40px auto 80px;
+        padding: 0 24px 24px;
+        display: grid;
+        gap: 28px;
+      }
+      .panel {
+        background: var(--surface);
+        border-radius: 24px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        padding: 28px;
+        display: grid;
+        gap: 20px;
+      }
+      .panel--compact {
+        padding: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(24px, 3vw, 32px);
+        letter-spacing: -0.03em;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      form.filters {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      select,
+      input[type="date"] {
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg);
+        font: inherit;
+        padding: 10px 14px;
+      }
+      select:focus,
+      input[type="date"]:focus {
+        outline: 2px solid rgba(37, 99, 235, 0.35);
+        outline-offset: 2px;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .primary-btn,
+      .ghost-btn {
+        border-radius: 14px;
+        padding: 12px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .primary-btn {
+        border: none;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        color: #fff;
+      }
+      .ghost-btn {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+      }
+      .kpi-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+      .kpi {
+        border-radius: 18px;
+        padding: 20px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        display: grid;
+        gap: 6px;
+      }
+      .kpi small { color: var(--muted); }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      thead {
+        background: rgba(148, 163, 184, 0.15);
+        color: var(--muted);
+      }
+      th, td {
+        text-align: left;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      tbody tr:last-child td { border-bottom: none; }
+      .table-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .empty {
+        padding: 40px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      @media (max-width: 768px) {
+        .topbar { flex-wrap: wrap; }
+        .topbar__right { width: 100%; justify-content: space-between; }
+        main { margin-top: 28px; }
+        table { display: block; overflow-x: auto; }
+        th, td { white-space: nowrap; }
+      }
     </style>
   </head>
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
-    <header class="sticky top-0 z-40 border-b border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/70 backdrop-blur">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
-        <a href="{{ url_for('index') }}" class="flex items-center gap-2 font-semibold tracking-tight">
-          <svg class="w-5 h-5 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-          <span>库存控制中心</span>
+  <body>
+    <header>
+      <div class="topbar">
+        <a href="{{ url_for('index') }}" class="brand" aria-label="返回库存总览">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+          </svg>
+          库存控制中心
         </a>
-        <div class="flex-1"></div>
-        <div class="hidden md:flex items-center gap-2 text-sm font-medium leading-none">
-          <a href="{{ url_for('index') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">库存总览</a>
-          <a href="{{ url_for('analytics_dashboard') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</a>
+        <nav>
+          <a class="nav-link" href="{{ url_for('index') }}">库存总览</a>
+          <span class="nav-link active">出入库统计</span>
           {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">用户管理</a>
+            <a class="nav-link" href="{{ url_for('manage_users') }}">用户管理</a>
           {% endif %}
-          <div class="text-slate-600 dark:text-slate-300 whitespace-nowrap">
-            {{ current_user.username }}
-            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
-          </div>
+        </nav>
+        <div class="topbar__right">
+          <span>{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</span>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="grid place-items-center h-10 px-4 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition">退出</button>
+            <button type="submit" class="ghost-btn" style="padding:8px 14px;">退出</button>
           </form>
-          <button data-theme-toggle class="ml-1 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 transition" aria-label="切换主题">
-            <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
+          <button data-theme-toggle class="theme-toggle" aria-label="切换主题">
+            <svg class="theme-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z" />
             </svg>
           </button>
-        </div>
-        <div class="md:hidden flex items-center gap-2">
-          <button data-theme-toggle class="h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10" aria-label="切换主题">
-            <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="md:hidden border-t border-slate-200/60 dark:border-white/10">
-        <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap gap-2 text-sm items-center">
-          <a href="{{ url_for('index') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">库存总览</a>
-          <span class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-200">出入库统计</span>
-          {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">用户管理</a>
-          {% endif %}
-          <div class="text-slate-500 dark:text-slate-300">{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</div>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10">退出</button>
-          </form>
         </div>
       </div>
     </header>
-
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      <section class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div class="p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft">
-          <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
-            <div>
-              <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/40 dark:border-white/10 text-slate-600 dark:text-slate-300">统计分析</span>
-              <h1 class="mt-2 text-2xl font-bold tracking-tight">出入库统计</h1>
-              <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">统计区间：{{ range_label }}</p>
-              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前门店：{{ selected_store_name }}</p>
-            </div>
-            <form method="get" class="grid w-full md:w-auto gap-3 sm:grid-cols-2 lg:grid-cols-5 items-end text-sm">
-              <input type="hidden" name="mode" value="sku" />
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
-                门店
-                <select name="store" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium min-w-0">
-                  {% for store_id, store in stores.items() %}
-                    <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
-                起始日期
-                <input type="date" name="start" value="{{ start_value }}" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium min-w-0" />
-              </label>
-              <label class="text-xs text-slate-500 dark:text-slate-400 grid gap-1 leading-none">
-                截止日期
-                <input type="date" name="end" value="{{ end_value }}" class="h-11 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 text-sm font-medium min-w-0" />
-              </label>
-              <div class="flex flex-col gap-2 sm:flex-row sm:col-span-2 lg:col-span-2 xl:col-span-2">
-                <button type="submit" class="w-full h-11 inline-flex items-center justify-center rounded-xl bg-brand-600 text-white text-sm font-medium hover:brightness-105 transition">更新</button>
-                <a href="{{ export_url }}" class="w-full h-11 inline-flex items-center justify-center rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm font-medium hover:bg-brand-500/10 transition">导出表格</a>
-              </div>
-            </form>
-          </div>
+    <main>
+      <section class="panel">
+        <div>
+          <h1>出入库统计</h1>
+          <div class="subtitle">统计区间：{{ range_label }} · 当前门店：{{ selected_store_name }}</div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:h-full">
-          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft h-full">
-            <div class="text-xs text-slate-500 dark:text-slate-400">入库总量</div>
-            <div class="mt-2 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</div>
+        <form method="get" class="filters">
+          <input type="hidden" name="mode" value="sku" />
+          <label>
+            门店
+            <select name="store">
+              {% for store_id, store in stores.items() %}
+                <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            起始日期
+            <input type="date" name="start" value="{{ start_value }}" />
+          </label>
+          <label>
+            截止日期
+            <input type="date" name="end" value="{{ end_value }}" />
+          </label>
+          <div class="actions">
+            <button type="submit" class="primary-btn">更新数据</button>
+            <a href="{{ export_url }}" class="ghost-btn">导出表格</a>
           </div>
-          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft h-full">
-            <div class="text-xs text-slate-500 dark:text-slate-400">出库总量</div>
-            <div class="mt-2 text-2xl font-semibold text-amber-600 dark:text-amber-400">{{ totals.outbound }}</div>
-          </div>
-          <div class="p-4 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft h-full">
-            <div class="text-xs text-slate-500 dark:text-slate-400">净变动</div>
-            <div class="mt-2 text-2xl font-semibold text-brand-600">{{ totals.net }}</div>
-          </div>
-        </div>
+        </form>
       </section>
-
-      <section class="p-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-xlsoft overflow-x-auto">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold tracking-tight">数据明细</h2>
-          <span class="text-xs text-slate-400">共 {{ stats_rows|length }} 条</span>
+      <section class="kpi-grid">
+        <article class="kpi">
+          <small>入库总量</small>
+          <strong style="font-size: 24px; color: #059669;">{{ totals.inbound }}</strong>
+        </article>
+        <article class="kpi">
+          <small>出库总量</small>
+          <strong style="font-size: 24px; color: #d97706;">{{ totals.outbound }}</strong>
+        </article>
+        <article class="kpi">
+          <small>净变动</small>
+          <strong style="font-size: 24px; color: var(--accent);">{{ totals.net }}</strong>
+        </article>
+        <article class="kpi">
+          <small>截止库存</small>
+          <strong style="font-size: 24px;">{{ totals.ending_quantity }}</strong>
+        </article>
+      </section>
+      <section class="panel panel--compact">
+        <div class="table-meta">
+          <h2 style="margin:0;font-size:18px;letter-spacing:-0.02em;">数据明细</h2>
+          <span>共 {{ stats_rows|length }} 条</span>
         </div>
         {% if has_data %}
-          <table class="min-w-full divide-y divide-slate-200/60 dark:divide-white/10 text-sm">
-            <thead class="bg-slate-100/60 dark:bg-white/5">
-              <tr>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">SKU 名称</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">分类</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">单位</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">入库数量</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">出库数量</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">净变动</th>
-                <th class="px-4 py-2 text-left font-medium text-slate-500">截止库存</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200/60 dark:divide-white/10">
-              {% for row in stats_rows %}
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
                 <tr>
-                  <td class="px-4 py-2 whitespace-nowrap">{{ row.sku }}</td>
-                  <td class="px-4 py-2 whitespace-nowrap text-slate-500 dark:text-slate-400">{{ row.category or '—' }}</td>
-                  <td class="px-4 py-2 whitespace-nowrap text-slate-500 dark:text-slate-400">{{ row.unit or '—' }}</td>
-                  <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ row.inbound }}</td>
-                  <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ row.outbound }}</td>
-                  <td class="px-4 py-2 text-brand-600">{{ row.net }}</td>
-                  <td class="px-4 py-2 text-slate-700 dark:text-slate-200">{{ row.ending_quantity if row.ending_quantity is not none else '—' }}</td>
+                  <th>SKU 名称</th>
+                  <th>分类</th>
+                  <th>单位</th>
+                  <th>入库数量</th>
+                  <th>出库数量</th>
+                  <th>净变动</th>
+                  <th>截止库存</th>
                 </tr>
-              {% endfor %}
-              <tr class="bg-slate-100/40 dark:bg-white/10 font-medium">
-                <td class="px-4 py-2">合计</td>
-                <td class="px-4 py-2 text-slate-500 dark:text-slate-400">—</td>
-                <td class="px-4 py-2 text-slate-500 dark:text-slate-400">—</td>
-                <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</td>
-                <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ totals.outbound }}</td>
-                <td class="px-4 py-2 text-brand-600">{{ totals.net }}</td>
-                <td class="px-4 py-2 text-slate-700 dark:text-slate-200">{{ totals.ending_quantity }}</td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {% for row in stats_rows %}
+                  <tr>
+                    <td>{{ row.sku }}</td>
+                    <td>{{ row.category or '—' }}</td>
+                    <td>{{ row.unit or '—' }}</td>
+                    <td style="color:#059669;">{{ row.inbound }}</td>
+                    <td style="color:#d97706;">{{ row.outbound }}</td>
+                    <td style="color:var(--accent);">{{ row.net }}</td>
+                    <td>{{ row.ending_quantity if row.ending_quantity is not none else '—' }}</td>
+                  </tr>
+                {% endfor %}
+                <tr>
+                  <td>合计</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td style="color:#059669;">{{ totals.inbound }}</td>
+                  <td style="color:#d97706;">{{ totals.outbound }}</td>
+                  <td style="color:var(--accent);">{{ totals.net }}</td>
+                  <td>{{ totals.ending_quantity }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         {% else %}
-          <p class="text-sm text-slate-500 dark:text-slate-400">当前暂无数据，尝试调整统计时间范围。</p>
+          <div class="empty">当前暂无数据，尝试调整统计时间范围。</div>
         {% endif %}
       </section>
     </main>
-
     <script>
       const root = document.documentElement;
       const getTheme = () => localStorage.getItem('theme');
       const setTheme = t => localStorage.setItem('theme', t);
       const applyTheme = t => root.classList.toggle('dark', t === 'dark');
-      const initTheme = () => { const t = getTheme(); if (t) applyTheme(t); else if (window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark'); };
+      const initTheme = () => {
+        const t = getTheme();
+        if (t) {
+          applyTheme(t);
+        } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          applyTheme('dark');
+        }
+      };
       initTheme();
       document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
         btn.addEventListener('click', () => {
