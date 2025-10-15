@@ -238,6 +238,9 @@
         </a>
         <nav>
           <a class="nav-link" href="{{ url_for('index') }}">库存总览</a>
+          {% if permissions.can_view_history %}
+            <a class="nav-link" href="{{ url_for('recent_activity') }}">最近动态</a>
+          {% endif %}
           <span class="nav-link active">出入库统计</span>
           {% if permissions.can_manage_users %}
             <a class="nav-link" href="{{ url_for('manage_users') }}">用户管理</a>

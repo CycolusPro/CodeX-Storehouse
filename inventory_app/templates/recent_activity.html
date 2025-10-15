@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>库存控制中心</title>
+    <title>最近动态 · 库存控制中心</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -817,9 +817,9 @@
           {% endif %}
         </div>
         <nav class="sidebar__nav">
-          <a class="nav-btn active" href="{{ url_for('index') }}">库存总览</a>
+          <a class="nav-btn" href="{{ url_for('index') }}">库存总览</a>
           {% if permissions.can_view_history %}
-            <a class="nav-btn" href="{{ url_for('recent_activity') }}">最近动态</a>
+            <a class="nav-btn active" href="{{ url_for('recent_activity') }}">最近动态</a>
             <a class="nav-btn" href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
           {% endif %}
           {% if permissions.can_manage_users %}
@@ -837,39 +837,17 @@
       <div class="main">
         <header class="main-header">
           <div class="header-inner">
-            <div class="search-group desktop-only">
-              <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" />
-              <button type="button" data-search-button data-input-selector="#keyword" class="btn btn--primary">搜索</button>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <h1 style="margin:0; font-size:26px; letter-spacing:-0.02em;">最近动态</h1>
+              <div class="panel__meta">门店：{{ stores[selected_store]['name'] }}</div>
             </div>
-            <div class="filter-group desktop-only">
-              <select id="categoryFilter" data-category-filter>
-                <option value="">全部分类</option>
-                {% for category_id, category in categories.items() %}
-                  <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
-                {% endfor %}
-              </select>
-              {% if permissions.can_manage_categories %}
-                <button class="btn btn--outline" data-open-modal="#categoryModal">分类管理</button>
-              {% endif %}
-            </div>
-            <div class="header-actions desktop-only">
-              {% if permissions.can_manage_items %}
-                <div class="dropdown">
-                  <button id="actionsMenuBtn" class="btn btn--outline" aria-haspopup="menu" aria-expanded="false">库存操作</button>
-                  <div id="actionsMenu" class="menu hidden">
-                    <button type="button" data-open-modal="#addModal">新增 SKU</button>
-                    <button type="button" id="importTrigger">从表格导入</button>
-                    <a href="/api/items/export">导出库存表格</a>
-                    <a href="/api/items/template">下载导入模板</a>
-                  </div>
-                </div>
-              {% endif %}
+            <div class="header-actions">
               <div class="dropdown">
                 <button id="userMenuBtn" class="btn btn--outline" aria-haspopup="menu" aria-expanded="false">{{ current_user.username }}</button>
                 <div id="userMenu" class="menu hidden">
                   <div class="panel__meta" style="padding:10px 12px;">{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</div>
+                  <a href="{{ url_for('index') }}">库存总览</a>
                   {% if permissions.can_view_history %}
-                    <a href="{{ url_for('recent_activity') }}">最近动态</a>
                     <a href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
                   {% endif %}
                   {% if permissions.can_manage_users %}
@@ -890,307 +868,115 @@
                 </svg>
               </button>
             </div>
-            <div class="mobile-only">
-              <div class="mobile-search">
-                <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" />
-                <button type="button" data-search-button data-input-selector="#keywordMobile" class="btn btn--outline">搜索</button>
-              </div>
-              <div class="mobile-filters">
-                <select id="categoryFilterMobile" data-category-filter>
-                  <option value="">全部分类</option>
-                  {% for category_id, category in categories.items() %}
-                    <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
-                  {% endfor %}
-                </select>
-                {% if permissions.can_manage_categories %}
-                  <button class="btn btn--outline" data-open-modal="#categoryModal">分类管理</button>
-                {% endif %}
-              </div>
-              {% if permissions.can_manage_items %}
-                <div class="mobile-actions">
-                  <button id="importTriggerM" class="btn btn--outline" type="button">导入</button>
-                  <a class="btn btn--outline" href="/api/items/template">模板</a>
-                  <a class="btn btn--outline" href="/api/items/export">导出</a>
-                  <button class="btn btn--primary" data-open-modal="#addModal">新增</button>
-                </div>
-              {% endif %}
-            </div>
           </div>
         </header>
         <main>
-          <section class="summary-grid">
-            <article class="summary-card">
-              <small>SKU 数量</small>
-              <strong>{{ summary.total_items }}</strong>
-            </article>
-            <article class="summary-card">
-              <small>库存总数</small>
-              <strong>{{ summary.total_quantity }}</strong>
-            </article>
-            <article class="summary-card">
-              <small>库存预警数量</small>
-              <strong style="color: {{ summary.low_stock_count and '#ef4444' or 'inherit' }};">{{ summary.low_stock_count }}</strong>
-            </article>
-            <article class="summary-card">
-              <small>出入库</small>
-              <div class="panel__meta">入 {{ summary.latest_in|format_datetime('%Y-%m-%d %H:%M') }} · 出 {{ summary.latest_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
-            </article>
-          </section>
-
-          {% if low_stock_items %}
-            <section class="alert-stack">
-              <div class="panel__header">
-                <h3>库存预警提醒</h3>
-                <button class="btn btn--outline" data-open-modal="#lowStockModal">查看全部</button>
+          <section class="panel timeline-panel">
+            <header class="timeline-header">
+              <div class="timeline-header__main">
+                <div class="timeline-header__title">
+                  <h2>出入库动态</h2>
+                </div>
+                <div class="timeline-header__meta">
+                  <span>共 {{ timeline_pagination.total }} 条</span>
+                  {% if timeline_is_demo %}
+                    <span class="timeline-demo-chip">演示数据</span>
+                  {% endif %}
+                </div>
               </div>
-              <p class="panel__meta">共有 {{ low_stock_items|length }} 个 SKU 达到阈值，请及时补货。</p>
-              <ul>
-                {% for item in low_stock_items[:4] %}
-                  <li>{{ item.name }} · 当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</li>
-                {% endfor %}
-              </ul>
-            </section>
-          {% endif %}
-
-          <div class="content-grid">
-            <section class="panel">
-              <div class="panel__header">
-                <h2>库存详情</h2>
-                <div class="panel__meta">共 {{ inventory_pagination.total }} 项</div>
+              <div class="timeline-actions">
+                <a class="btn btn--outline" href="/api/history/export">导出记录</a>
+                {% if permissions.can_clear_history %}
+                  <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
+                    <input type="hidden" name="next" value="{{ request.full_path }}" />
+                    <button type="submit" class="btn btn--danger">清除记录</button>
+                  </form>
+                {% endif %}
               </div>
-              <div class="pagination">
-                <form method="get" action="{{ url_for('index') }}">
+            </header>
+            <div class="timeline-toolbar">
+              <div class="timeline-filters">
+                <form method="get" action="{{ url_for('recent_activity') }}">
                   {% for key, values in preserved_query.items() %}
-                    {% if key not in ['inventory_per_page', 'inventory_page'] %}
+                    {% if key not in ['timeline_sku', 'timeline_page'] %}
                       {% for value in values %}
                         <input type="hidden" name="{{ key }}" value="{{ value }}" />
                       {% endfor %}
                     {% endif %}
                   {% endfor %}
-                  <input type="hidden" name="inventory_page" value="1" />
-                  <label>每页
-                    <select name="inventory_per_page" onchange="this.form.submit()">
-                      {% for option in [5, 10, 20, 50] %}
-                        <option value="{{ option }}" {% if inventory_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                  <input type="hidden" name="timeline_page" value="1" />
+                  <label>筛选 SKU
+                    <select name="timeline_sku" onchange="this.form.submit()">
+                      <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
+                      {% for name in timeline_sku_options %}
+                        <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
                       {% endfor %}
                     </select>
                   </label>
                 </form>
-                <div style="display:flex; gap:8px; align-items:center;">
-                  <span>第 {{ inventory_pagination.start_index or 0 }}-{{ inventory_pagination.end_index or 0 }} / {{ inventory_pagination.total }} 项</span>
-                  <a href="{{ inventory_pagination.has_prev and build_query(inventory_page=inventory_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
-                  <a href="{{ inventory_pagination.has_next and build_query(inventory_page=inventory_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                <form method="get" action="{{ url_for('recent_activity') }}">
+                  {% for key, values in preserved_query.items() %}
+                    {% if key not in ['timeline_per_page', 'timeline_page'] %}
+                      {% for value in values %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                      {% endfor %}
+                    {% endif %}
+                  {% endfor %}
+                  <input type="hidden" name="timeline_page" value="1" />
+                  <label>每页
+                    <select name="timeline_per_page" onchange="this.form.submit()">
+                      {% for option in [5, 10, 20, 50] %}
+                        <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </form>
+              </div>
+              <div class="timeline-pagination">
+                <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
+                <div class="timeline-pagination__buttons">
+                  <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
+                  <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
                 </div>
               </div>
-              {% if items %}
-                <div id="inventoryList" class="inventory-list">
-                  {% for item in items %}
-                    {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
-                    {% set category_info = categories.get(item.category) %}
-                    <div class="inventory-item {% if is_low %}low{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
-                      <div class="item-top">
-                        <div>
-                          <div class="item-name">
-                            <span title="{{ item.name }}">{{ item.name }}</span>
-                            {% if is_low %}
-                              <span class="badge">库存预警</span>
-                            {% endif %}
-                          </div>
-                          <div class="item-details">
-                            <span>最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</span>
-                            <span>最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</span>
-                            {% if item.threshold is not none %}
-                              <span {% if is_low %}style="color:#ef4444;"{% endif %}>阈值提醒：≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}{% if is_low %}（当前已触发）{% endif %}</span>
-                            {% else %}
-                              <span>未设置阈值提醒</span>
-                            {% endif %}
-                            <span>分类：{{ category_info.name if category_info else '未分类' }}</span>
-                          </div>
-                        </div>
-                        <span class="quantity-chip">{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</span>
-                      </div>
-                      <div class="inventory-actions">
-                        {% if permissions.can_manage_items %}
-                          <button
-                            class="btn btn--outline"
-                            type="button"
-                            data-manage
-                            data-name="{{ item.name|e }}"
-                            data-quantity="{{ item.quantity }}"
-                            data-unit="{{ (item.unit or '')|e }}"
-                            data-category="{{ item.category or 'uncategorized' }}"
-                            data-category-name="{{ (category_info.name if category_info else '未分类')|e }}"
-                            data-threshold="{{ item.threshold if item.threshold is not none else '' }}"
-                          >管理</button>
-                        {% endif %}
-                        {% if permissions.can_adjust_in %}
-                          <button class="btn btn--outline" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
-                        {% endif %}
-                        {% if permissions.can_adjust_out %}
-                          <button class="btn btn--outline" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
-                        {% endif %}
-                        {% if permissions.can_manage_items and stores|length > 1 %}
-                          <button class="btn btn--outline" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
-                        {% endif %}
-                        {% if permissions.can_manage_items %}
-                          <form method="post" action="/submit" onsubmit="return confirm('确认删除 {{ item.name }} 吗？');">
-                            <input type="hidden" name="action" value="delete" />
-                            <input type="hidden" name="name" value="{{ item.name }}" />
-                            <input type="hidden" name="store_id" value="{{ selected_store }}" />
-                            <button class="btn btn--danger" type="submit">删除</button>
-                          </form>
-                        {% endif %}
-                      </div>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="panel__meta" style="padding:40px; text-align:center;">暂无库存记录，点击“库存操作”中的新增录入第一条库存。</div>
-              {% endif %}
-            </section>
-
-          </div>
-        </main>
-      </div>
-    </div>
-
-    {% if low_stock_items %}
-      <div id="lowStockModal" class="modal" data-modal>
-        <div class="modal__dialog">
-          <button type="button" class="modal__close" data-close-modal>&times;</button>
-          <h2 style="margin:0; font-size:22px;">库存预警列表</h2>
-          <p class="panel__meta">以下 SKU 库存不及阈值，请尽快安排补货。</p>
-          <table>
-            <thead>
-              <tr>
-                <th>SKU 名称</th>
-                <th>当前库存</th>
-                <th>阈值</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in low_stock_items %}
-                <tr>
-                  <td>{{ item.name }}</td>
-                  <td>{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
-                  <td>{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div style="display:flex; justify-content:flex-end;">
-            <button class="btn btn--primary" data-close-modal>知道了</button>
-          </div>
-        </div>
-      </div>
-    {% endif %}
-
-    <div id="thresholdAlert" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:520px;">
-        <button type="button" class="modal__close" data-close-alert>&times;</button>
-        <h2 style="margin:0; font-size:22px;">库存预警提示</h2>
-        <p class="panel__meta">您有 SKU 库存已低于设置阈值，请及时处理。</p>
-        <div style="display:flex; justify-content:flex-end;">
-          <button class="btn btn--primary" data-close-alert>我已知晓</button>
-        </div>
-      </div>
-    </div>
-
-    {% if permissions.can_manage_items %}
-      <div id="manageModal" class="modal hidden" data-modal>
-        <div class="modal__dialog" style="max-width:560px;">
-          <button type="button" class="modal__close" data-close-modal>&times;</button>
-          <h2 style="margin:0; font-size:22px;">管理 SKU</h2>
-          <p id="manageSummary" class="panel__meta"></p>
-          <form method="post" action="/submit" class="inventory-form" novalidate id="manageForm">
-            <input type="hidden" name="action" value="update" />
-            <input type="hidden" name="name" id="manageName" />
-            <input type="hidden" name="store_id" value="{{ selected_store }}" />
-            <label>设置数量<input name="quantity" id="manageQuantity" type="number" min="0" step="1" /></label>
-            <label>单位<input name="unit" id="manageUnit" placeholder="件" /></label>
-            <label>库存分类
-              <select name="category" id="manageCategory">
-                {% for category_id, category in categories.items() %}
-                  <option value="{{ category_id }}">{{ category.name }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>阈值提醒（可选）<input name="threshold" id="manageThreshold" type="number" min="0" step="1" placeholder="例如 10" /></label>
-            <div class="actions" style="justify-content:flex-end;">
-              <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
-              <button type="submit" class="btn btn--primary">保存修改</button>
             </div>
-          </form>
-        </div>
-      </div>
-    {% endif %}
-
-    <div id="addModal" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:600px;">
-        <button type="button" class="modal__close" data-close-modal>&times;</button>
-        <h2 style="margin:0; font-size:22px;">新增 SKU</h2>
-        <form method="post" action="/submit" class="inventory-form" novalidate>
-          <input type="hidden" name="action" value="create" />
-          <label>SKU 名称<input name="name" placeholder="请输入 SKU 名称" required /></label>
-          <label>数量<input name="quantity" type="number" min="0" step="1" value="0" /></label>
-          <label>单位<input name="unit" placeholder="例如 件、箱" /></label>
-          <label>分类
-            <select name="category">
-              {% for category_id, category in categories.items() %}
-                <option value="{{ category_id }}">{{ category.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>阈值（可选）<input name="threshold" type="number" min="0" step="1" /></label>
-          <input type="hidden" name="store_id" value="{{ selected_store }}" />
-          <div class="actions" style="justify-content:flex-end;">
-            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
-            <button type="submit" class="btn btn--primary">保存</button>
-          </div>
-        </form>
-      </div>
-    </div>
-    <div id="adjustModal" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:480px;">
-        <button type="button" class="modal__close" data-close-modal>&times;</button>
-        <h2 id="adjustModalTitle" style="margin:0; font-size:22px;">库存调整</h2>
-        <p id="adjustModalInfo" class="panel__meta"></p>
-        <form method="post" action="/submit" class="inventory-form" novalidate>
-          <input type="hidden" name="name" id="adjustName" />
-          <input type="hidden" name="store_id" value="{{ selected_store }}" />
-          <input type="hidden" name="action" id="adjustAction" />
-          <label id="adjustQuantityLabel">调整数量<input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required /></label>
-          <div class="actions" style="justify-content:flex-end;">
-            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
-            <button type="submit" class="btn btn--primary" id="adjustSubmitBtn">确认</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div id="transferModal" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:520px;">
-        <button type="button" class="modal__close" data-close-modal>&times;</button>
-        <h2 style="margin:0; font-size:22px;">库存调拨</h2>
-        <p id="transferInfo" class="panel__meta"></p>
-        <form method="post" action="/submit" class="inventory-form" novalidate>
-          <input type="hidden" name="action" value="transfer" />
-          <input type="hidden" name="name" id="transferName" />
-          <input type="hidden" name="store_id" id="transferSourceStore" value="{{ selected_store }}" />
-          <div class="panel__meta">当前调出门店：<strong>{{ stores[selected_store]['name'] }}</strong></div>
-          <label>调入门店
-            <select name="target_store_id" id="transferTargetStore">
-              {% for store_id, store in stores.items() %}
-                <option value="{{ store_id }}">{{ store.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>调拨数量<input id="transferQuantity" name="quantity" type="number" min="1" step="1" required /></label>
-          <div class="actions" style="justify-content:flex-end;">
-            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
-            <button type="submit" class="btn btn--primary" id="transferSubmitBtn">确认调拨</button>
-          </div>
-        </form>
+            {% if timeline_is_demo %}
+              <div class="timeline-demo-banner">
+                <strong>提示</strong>
+                <span>暂无真实的出入库记录，以下为示例动态，方便你在桌面端快速检查布局与间距效果。</span>
+              </div>
+            {% endif %}
+            <div class="timeline-list">
+              {% if timeline %}
+                {% for event in timeline %}
+                  <article class="timeline-item">
+                    <div class="timeline-item__marker">
+                      <span class="timeline-badge {% if event.badge == 'success' %}success{% elif event.badge == 'danger' %}danger{% else %}neutral{% endif %}">{{ event.type }}</span>
+                      <time class="timeline-item__time" datetime="{{ event.timestamp.isoformat() if event.timestamp is not none else '' }}">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</time>
+                    </div>
+                    <div class="timeline-item__content">
+                      <div class="timeline-item__title">{{ event.name }}</div>
+                      <div class="timeline-item__meta">操作人：{{ event.user }}</div>
+                      {% if event.details %}
+                        {% if event.details is string %}
+                          <div class="timeline-item__details">{{ event.details }}</div>
+                        {% else %}
+                          <ul class="timeline-item__details timeline-item__list">
+                            {% for detail in event.details %}
+                              <li>{{ detail }}</li>
+                            {% endfor %}
+                          </ul>
+                        {% endif %}
+                      {% endif %}
+                    </div>
+                  </article>
+                {% endfor %}
+              {% else %}
+                <div class="panel__meta" style="text-align:center; padding:32px;">当前暂无出入库记录，开始第一次操作后即可在此查看。</div>
+              {% endif %}
+            </div>
+          </section>
+        </main>
       </div>
     </div>
 
@@ -1223,67 +1009,6 @@
           {% endfor %}
         </div>
       </div>
-    </div>
-
-    <div id="categoryModal" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:520px;">
-        <button type="button" class="modal__close" data-close-modal>&times;</button>
-        <h2 style="margin:0; font-size:22px;">分类管理</h2>
-        <form method="post" action="{{ url_for('create_category_route') }}" class="inventory-form" novalidate>
-          <label>新增分类名称<input name="name" placeholder="例如：饮品" required /></label>
-          <div class="actions" style="justify-content:flex-end;">
-            <button type="submit" class="btn btn--primary">新增分类</button>
-          </div>
-        </form>
-        <div class="panel__meta">现有分类</div>
-        <div class="timeline-list" style="max-height:300px; overflow:auto;">
-          {% for category_id, category in categories.items() %}
-            <div class="timeline-item" style="gap:10px;">
-              <div style="font-weight:600;">{{ category.name }}</div>
-              <div class="panel__meta">ID：{{ category_id }}</div>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-                {% if category_id != 'uncategorized' %}
-                  <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 吗？');">
-                    <button type="submit" class="btn btn--danger">删除</button>
-                  </form>
-                  <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 并清空其下所有 SKU 吗？');">
-                    <input type="hidden" name="cascade" value="1" />
-                    <button type="submit" class="btn btn--danger">连同库存删除</button>
-                  </form>
-                {% else %}
-                  <span class="panel__meta">系统默认分类</span>
-                {% endif %}
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
-    <div id="importPreviewModal" class="modal hidden" data-modal>
-      <div class="modal__dialog" style="max-width:720px;">
-        <button type="button" class="modal__close" id="importPreviewClose">&times;</button>
-        <h2 style="margin:0; font-size:22px;">导入前检查</h2>
-        <p class="panel__meta">请确认系统已正确识别即将导入的 SKU 数据。</p>
-        <div id="importPreviewStatus" class="panel__meta"></div>
-        <div style="overflow:auto; border:1px solid var(--border); border-radius:16px;">
-          <table id="importPreviewTable"></table>
-        </div>
-        <div id="importPreviewSummary" class="panel__meta"></div>
-        <div class="actions" style="justify-content:flex-end;">
-          <button type="button" class="btn btn--ghost" id="importPreviewCancel">取消</button>
-          <button type="button" class="btn btn--primary" id="importPreviewConfirm" disabled>确认导入</button>
-        </div>
-      </div>
-    </div>
-
-    <form id="importForm" method="post" action="/import" enctype="multipart/form-data" class="hidden">
-      <input type="file" id="importFile" name="file" accept=".xlsx,.xls,.csv" />
-      <input type="hidden" id="importStoreId" name="store_id" value="{{ selected_store }}" />
-    </form>
-
-    <div id="toast" class="toast hidden">
-      <div class="toast__body">操作已提交</div>
     </div>
 
     <script>

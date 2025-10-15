@@ -132,6 +132,79 @@ def create_app(
     def _list_categories() -> Dict[str, Dict[str, Any]]:
         return manager.list_categories()
 
+    def _parse_positive_int(value: Optional[str], default: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
+    def _build_timeline_context(
+        history_entries: Sequence[InventoryHistoryEntry],
+    ) -> Dict[str, Any]:
+        timeline_sku = (request.args.get("timeline_sku") or "").strip()
+        if timeline_sku:
+            filtered_history = [
+                entry for entry in history_entries if entry.name == timeline_sku
+            ]
+        else:
+            filtered_history = list(history_entries)
+
+        timeline_per_page = _parse_positive_int(
+            request.args.get("timeline_per_page"), 5
+        )
+        timeline_page = _parse_positive_int(request.args.get("timeline_page"), 1)
+        timeline_total = len(filtered_history)
+        timeline_pages = (
+            max(1, math.ceil(timeline_total / timeline_per_page))
+            if timeline_total
+            else 1
+        )
+        if timeline_page > timeline_pages:
+            timeline_page = timeline_pages
+        timeline_start = (timeline_page - 1) * timeline_per_page
+        timeline_end = timeline_start + timeline_per_page
+        timeline_entries = filtered_history[timeline_start:timeline_end]
+        timeline = _recent_activity(timeline_entries, limit=None)
+        timeline_is_demo = False
+        if not timeline:
+            timeline = _demo_timeline_events()
+            timeline_is_demo = True
+            timeline_pagination = {
+                "page": 1,
+                "per_page": len(timeline) or timeline_per_page,
+                "total": len(timeline),
+                "pages": 1,
+                "has_prev": False,
+                "has_next": False,
+                "prev_page": 1,
+                "next_page": 1,
+                "start_index": 1 if timeline else 0,
+                "end_index": len(timeline),
+            }
+        else:
+            timeline_pagination = {
+                "page": timeline_page,
+                "per_page": timeline_per_page,
+                "total": timeline_total,
+                "pages": timeline_pages,
+                "has_prev": timeline_page > 1,
+                "has_next": timeline_page < timeline_pages,
+                "prev_page": max(1, timeline_page - 1),
+                "next_page": min(timeline_pages, timeline_page + 1),
+                "start_index": timeline_start + 1 if timeline_total else 0,
+                "end_index": min(timeline_end, timeline_total),
+            }
+
+        timeline_sku_options = sorted({entry.name for entry in history_entries})
+        return {
+            "timeline": timeline,
+            "timeline_pagination": timeline_pagination,
+            "timeline_sku": timeline_sku,
+            "timeline_sku_options": timeline_sku_options,
+            "timeline_is_demo": timeline_is_demo,
+        }
+
     def _resolve_store_id(store_id: Optional[str] = None) -> str:
         stores = _list_stores()
         if store_id and store_id in stores:
@@ -267,7 +340,12 @@ def create_app(
             session["store_id"] = target
             if request.is_json:
                 return jsonify({"store_id": target})
-            return redirect(url_for("index"))
+            next_target = request.form.get("next") or request.args.get("next")
+            if not next_target:
+                next_target = request.referrer
+            if not _is_safe_redirect(next_target):
+                next_target = url_for("index")
+            return redirect(next_target)
         if request.is_json:
             return jsonify({"error": "指定门店不存在"}), 404
         return redirect(url_for("index"))
@@ -412,13 +490,6 @@ def create_app(
             "latest_out": latest_out,
             "low_stock_count": len(low_stock_items),
         }
-        def _parse_positive_int(value: Optional[str], default: int) -> int:
-            try:
-                parsed = int(value)
-            except (TypeError, ValueError):
-                return default
-            return parsed if parsed > 0 else default
-
         inventory_per_page = _parse_positive_int(
             request.args.get("inventory_per_page"), 10
         )
@@ -447,62 +518,6 @@ def create_app(
             "end_index": min(inventory_end, inventory_total),
         }
 
-        history_entries = manager.list_history(store_id=selected_store)
-        timeline_sku = (request.args.get("timeline_sku") or "").strip()
-        if timeline_sku:
-            filtered_history = [
-                entry for entry in history_entries if entry.name == timeline_sku
-            ]
-        else:
-            filtered_history = history_entries
-
-        timeline_per_page = _parse_positive_int(
-            request.args.get("timeline_per_page"), 5
-        )
-        timeline_page = _parse_positive_int(request.args.get("timeline_page"), 1)
-        timeline_total = len(filtered_history)
-        timeline_pages = (
-            max(1, math.ceil(timeline_total / timeline_per_page))
-            if timeline_total
-            else 1
-        )
-        if timeline_page > timeline_pages:
-            timeline_page = timeline_pages
-        timeline_start = (timeline_page - 1) * timeline_per_page
-        timeline_end = timeline_start + timeline_per_page
-        timeline_entries = filtered_history[timeline_start:timeline_end]
-        timeline = _recent_activity(timeline_entries, limit=None)
-        timeline_is_demo = False
-        if not timeline:
-            timeline = _demo_timeline_events()
-            timeline_is_demo = True
-            timeline_pagination = {
-                "page": 1,
-                "per_page": len(timeline) or timeline_per_page,
-                "total": len(timeline),
-                "pages": 1,
-                "has_prev": False,
-                "has_next": False,
-                "prev_page": 1,
-                "next_page": 1,
-                "start_index": 1 if timeline else 0,
-                "end_index": len(timeline),
-            }
-        else:
-            timeline_pagination = {
-                "page": timeline_page,
-                "per_page": timeline_per_page,
-                "total": timeline_total,
-                "pages": timeline_pages,
-                "has_prev": timeline_page > 1,
-                "has_next": timeline_page < timeline_pages,
-                "prev_page": max(1, timeline_page - 1),
-                "next_page": min(timeline_pages, timeline_page + 1),
-                "start_index": timeline_start + 1 if timeline_total else 0,
-                "end_index": min(timeline_end, timeline_total),
-            }
-        timeline_sku_options = sorted({entry.name for entry in history_entries})
-
         preserved_query = {key: request.args.getlist(key) for key in request.args}
 
         def build_query(**updates: Any) -> str:
@@ -519,7 +534,6 @@ def create_app(
             "index.html",
             items=items,
             summary=summary,
-            timeline=timeline,
             import_summary=import_summary,
             low_stock_items=low_stock_items,
             stores=stores,
@@ -527,13 +541,40 @@ def create_app(
             selected_store=selected_store,
             selected_category=selected_category,
             inventory_pagination=inventory_pagination,
-            timeline_pagination=timeline_pagination,
-            timeline_sku=timeline_sku,
-            timeline_sku_options=timeline_sku_options,
             preserved_query=preserved_query,
             build_query=build_query,
             inventory_search=inventory_search,
-            timeline_is_demo=timeline_is_demo,
+        )
+
+    @app.get("/history")
+    @role_required("admin", "super_admin")
+    def recent_activity() -> Any:
+        stores = _list_stores()
+        selected_store = _resolve_store_id(request.args.get("store_id"))
+        categories = _list_categories()
+        timeline_context = _build_timeline_context(
+            manager.list_history(store_id=selected_store)
+        )
+
+        preserved_query = {key: request.args.getlist(key) for key in request.args}
+
+        def build_query(**updates: Any) -> str:
+            params = request.args.to_dict()
+            for key, value in updates.items():
+                if value is None:
+                    params.pop(key, None)
+                else:
+                    params[key] = value
+            return url_for("recent_activity", **params)
+
+        return render_template(
+            "recent_activity.html",
+            stores=stores,
+            categories=categories,
+            selected_store=selected_store,
+            preserved_query=preserved_query,
+            build_query=build_query,
+            **timeline_context,
         )
 
     @app.post("/history/clear")
@@ -541,7 +582,10 @@ def create_app(
     def clear_history() -> Any:
         manager.clear_history()
         flash("已清除最近动态记录", "success")
-        return redirect(url_for("index"))
+        next_target = request.form.get("next") or request.args.get("next")
+        if not _is_safe_redirect(next_target):
+            next_target = url_for("recent_activity")
+        return redirect(next_target)
 
     @app.get("/api/items")
     @login_required
