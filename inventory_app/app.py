@@ -392,6 +392,15 @@ def create_app(
                 item.name.casefold(),
             ),
         )
+        inventory_search = (request.args.get("inventory_search") or "").strip()
+
+        if inventory_search:
+            search_term = inventory_search.casefold()
+            items_filtered = [
+                item for item in items_sorted if search_term in item.name.casefold()
+            ]
+        else:
+            items_filtered = list(items_sorted)
         total_quantity = sum(item.quantity for item in items_sorted)
         latest_in = _latest_timestamp(items_sorted, key="last_in")
         latest_out = _latest_timestamp(items_sorted, key="last_out")
@@ -412,7 +421,7 @@ def create_app(
             request.args.get("inventory_per_page"), 10
         )
         inventory_page = _parse_positive_int(request.args.get("inventory_page"), 1)
-        inventory_total = len(items_sorted)
+        inventory_total = len(items_filtered)
         inventory_pages = (
             max(1, math.ceil(inventory_total / inventory_per_page))
             if inventory_total
@@ -422,7 +431,7 @@ def create_app(
             inventory_page = inventory_pages
         inventory_start = (inventory_page - 1) * inventory_per_page
         inventory_end = inventory_start + inventory_per_page
-        items = items_sorted[inventory_start:inventory_end]
+        items = items_filtered[inventory_start:inventory_end]
         inventory_pagination = {
             "page": inventory_page,
             "per_page": inventory_per_page,
@@ -509,6 +518,7 @@ def create_app(
             timeline_sku_options=timeline_sku_options,
             preserved_query=preserved_query,
             build_query=build_query,
+            inventory_search=inventory_search,
         )
 
     @app.post("/history/clear")
