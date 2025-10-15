@@ -959,6 +959,29 @@ def create_app(
         filename = _timestamped_filename("inventory_history_stats")
         return _csv_response(content, filename)
 
+    @app.post("/api/items/import/preview")
+    @role_required("admin", "super_admin")
+    def preview_import_inventory_api() -> Any:
+        try:
+            rows = _extract_import_rows(request)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        payload = _get_payload(request)
+        store_id = payload.get("store_id") or request.args.get("store_id")
+        resolved_store = _resolve_store_id(store_id)
+        preview_rows = manager.preview_import_rows(
+            rows, store_id=resolved_store
+        )
+        valid_count = sum(1 for row in preview_rows if row.get("valid"))
+        return jsonify(
+            {
+                "rows": preview_rows,
+                "total": len(preview_rows),
+                "valid": valid_count,
+                "invalid": len(preview_rows) - valid_count,
+            }
+        )
+
     @app.post("/api/items/import")
     @role_required("admin", "super_admin")
     def import_inventory_api() -> Any:

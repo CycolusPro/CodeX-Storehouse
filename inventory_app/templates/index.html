@@ -493,10 +493,54 @@
       {% endif %}
     </main>
 
+    <!-- Import Preview Modal -->
+    <div id="importPreviewModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
+      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
+      <div class="relative w-full max-w-3xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-semibold">导入前检查</h2>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">请确认系统已正确识别即将导入的 SKU 数据。</p>
+          </div>
+          <button type="button" id="importPreviewClose" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+        </div>
+        <div id="importPreviewStatus" class="text-sm text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 rounded-xl px-4 py-3">
+          请按照模板准备表格并选择文件，系统会在导入前完成检查。
+        </div>
+        <div class="border border-slate-200/60 dark:border-white/10 rounded-xl overflow-hidden">
+          <div class="max-h-72 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-100/80 dark:bg-white/5 text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th class="px-4 py-2 text-left font-medium">行号</th>
+                  <th class="px-4 py-2 text-left font-medium">SKU 名称</th>
+                  <th class="px-4 py-2 text-left font-medium">数量</th>
+                  <th class="px-4 py-2 text-left font-medium">单位</th>
+                  <th class="px-4 py-2 text-left font-medium">分类</th>
+                  <th class="px-4 py-2 text-left font-medium">阈值提醒</th>
+                  <th class="px-4 py-2 text-left font-medium">识别状态</th>
+                </tr>
+              </thead>
+              <tbody id="importPreviewTable" class="divide-y divide-slate-200/60 dark:divide-white/5 bg-white dark:bg-slate-900">
+                <tr>
+                  <td colspan="7" class="px-4 py-6 text-center text-sm text-slate-400">等待文件上传</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="importPreviewSummary" class="text-sm text-slate-500 dark:text-slate-400"></div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="importPreviewCancel" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
+          <button type="button" id="importPreviewConfirm" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">确认导入</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Hidden Import Form -->
     <form id="importForm" class="hidden" action="/import" method="post" enctype="multipart/form-data">
       <input id="importFile" name="file" type="file" accept=".csv,text/csv">
-      <input type="hidden" name="store_id" value="{{ selected_store }}">
+      <input id="importStoreId" type="hidden" name="store_id" value="{{ selected_store }}">
     </form>
 
     {% if low_stock_items %}
@@ -890,12 +934,228 @@
         f.addEventListener('submit', () => { setTimeout(showToast, 50); });
       });
 
-      // import wiring
+      // import wiring with preview
       const fileInput = document.getElementById('importFile');
       const importForm = document.getElementById('importForm');
+      const importStoreInput = document.getElementById('importStoreId');
+      const storeSelect = document.querySelector('select[name="store_id"]');
+      const importPreviewModal = document.getElementById('importPreviewModal');
+      const importPreviewStatus = document.getElementById('importPreviewStatus');
+      const importPreviewTable = document.getElementById('importPreviewTable');
+      const importPreviewSummary = document.getElementById('importPreviewSummary');
+      const importPreviewConfirm = document.getElementById('importPreviewConfirm');
+      const importPreviewCancel = document.getElementById('importPreviewCancel');
+      const importPreviewClose = document.getElementById('importPreviewClose');
       const importTriggers = [document.getElementById('importTrigger'), document.getElementById('importTriggerM')].filter(Boolean);
-      importTriggers.forEach(t=>t.addEventListener('click',()=>fileInput?.click()));
-      fileInput?.addEventListener('change',()=> fileInput.files.length && importForm.submit());
+      let pendingImportFile = null;
+
+      function currentStoreId(){
+        if(storeSelect){
+          return storeSelect.value;
+        }
+        if(importStoreInput){
+          return importStoreInput.value || '';
+        }
+        return '';
+      }
+
+      function syncImportStore(){
+        if(importStoreInput){
+          importStoreInput.value = currentStoreId();
+        }
+      }
+
+      function setPreviewStatus(message, variant = 'info'){
+        if(!importPreviewStatus){
+          return;
+        }
+        importPreviewStatus.textContent = message;
+        if(variant === 'error'){
+          importPreviewStatus.classList.add('text-red-600','dark:text-red-300');
+        } else {
+          importPreviewStatus.classList.remove('text-red-600','dark:text-red-300');
+        }
+      }
+
+      function renderPreviewRows(rows, options = {}){
+        const { emptyText = '未识别到可导入的数据' } = options;
+        if(!importPreviewTable){
+          return;
+        }
+        importPreviewTable.innerHTML = '';
+        if(!Array.isArray(rows) || !rows.length){
+          const emptyRow = document.createElement('tr');
+          const emptyCell = document.createElement('td');
+          emptyCell.colSpan = 7;
+          emptyCell.className = 'px-4 py-6 text-center text-sm text-slate-400';
+          emptyCell.textContent = emptyText;
+          emptyRow.appendChild(emptyCell);
+          importPreviewTable.appendChild(emptyRow);
+          if(importPreviewSummary){
+            importPreviewSummary.textContent = '';
+          }
+          if(importPreviewConfirm){
+            importPreviewConfirm.disabled = true;
+            importPreviewConfirm.textContent = '确认导入';
+          }
+          return;
+        }
+        let validCount = 0;
+        rows.forEach(row => {
+          const tr = document.createElement('tr');
+          const isValid = Boolean(row && row.valid);
+          if(isValid){
+            validCount += 1;
+            tr.className = 'bg-white dark:bg-slate-900';
+          } else {
+            tr.className = 'bg-red-50/70 dark:bg-red-500/10';
+          }
+          const categoryName = row?.category_name || '未分类';
+          const categoryInput = row?.category_input || '';
+          const categoryText = categoryInput && categoryInput !== categoryName
+            ? `${categoryName}（原始：${categoryInput}）`
+            : categoryName;
+          const messages = Array.isArray(row?.messages) ? row.messages : [];
+          const statusText = isValid
+            ? '可导入'
+            : messages.length
+              ? `将被忽略：${messages.join('；')}`
+              : '将被忽略：数据格式异常';
+          const cells = [
+            String(row?.index ?? ''),
+            row?.name || '',
+            row?.quantity === 0 || row?.quantity ? String(row.quantity) : '—',
+            row?.unit ? String(row.unit) : '—',
+            categoryText,
+            row?.threshold === 0 || row?.threshold ? String(row.threshold) : '—',
+            statusText,
+          ];
+          cells.forEach((value, idx) => {
+            const td = document.createElement('td');
+            td.className = 'px-4 py-2 text-sm align-top';
+            if(idx === 6){
+              td.className += ' max-w-xs';
+            }
+            td.textContent = value;
+            tr.appendChild(td);
+          });
+          importPreviewTable.appendChild(tr);
+        });
+        const total = rows.length;
+        const invalidCount = total - validCount;
+        if(importPreviewSummary){
+          let summary = `共识别 ${total} 条记录`;
+          if(validCount){
+            summary += `，其中 ${validCount} 条可导入`;
+          }
+          if(invalidCount){
+            summary += `，${invalidCount} 条存在问题`;
+          }
+          importPreviewSummary.textContent = summary;
+        }
+        if(importPreviewConfirm){
+          importPreviewConfirm.disabled = validCount === 0;
+          importPreviewConfirm.textContent = validCount ? `确认导入（${validCount} 条）` : '确认导入';
+        }
+      }
+
+      function resetImportPreview(options = {}){
+        const { preserveFile = false } = options;
+        pendingImportFile = null;
+        if(fileInput && !preserveFile){
+          fileInput.value = '';
+        }
+        setPreviewStatus('请按照模板准备表格并选择文件，系统会在导入前完成检查。');
+        renderPreviewRows([], { emptyText: '等待文件上传' });
+      }
+
+      syncImportStore();
+      storeSelect?.addEventListener('change', syncImportStore);
+      importPreviewCancel?.addEventListener('click', () => resetImportPreview());
+      importPreviewClose?.addEventListener('click', () => resetImportPreview());
+      importPreviewModal?.addEventListener('click', event => {
+        if(event.target === importPreviewModal){
+          resetImportPreview();
+        }
+      });
+
+      importTriggers.forEach(trigger => {
+        trigger.addEventListener('click', () => {
+          if(!fileInput){
+            return;
+          }
+          resetImportPreview();
+          syncImportStore();
+          fileInput.click();
+        });
+      });
+
+      fileInput?.addEventListener('change', async () => {
+        if(!fileInput.files?.length || !importForm){
+          return;
+        }
+        const file = fileInput.files[0];
+        pendingImportFile = null;
+        syncImportStore();
+        openModal('#importPreviewModal');
+        setPreviewStatus('正在分析导入文件，请稍候…');
+        if(importPreviewSummary){
+          importPreviewSummary.textContent = '';
+        }
+        if(importPreviewConfirm){
+          importPreviewConfirm.disabled = true;
+          importPreviewConfirm.textContent = '确认导入';
+        }
+        renderPreviewRows([], { emptyText: '正在分析导入文件…' });
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const storeId = currentStoreId();
+          if(storeId){
+            formData.append('store_id', storeId);
+          }
+          const response = await fetch('/api/items/import/preview', {
+            method: 'POST',
+            body: formData,
+          });
+          let data = null;
+          try {
+            data = await response.json();
+          } catch (err) {
+            data = null;
+          }
+          if(!response.ok){
+            const message = data && data.error ? data.error : '导入前检查失败';
+            throw new Error(message);
+          }
+          pendingImportFile = file;
+          renderPreviewRows(data?.rows || []);
+          setPreviewStatus('检查完成，请确认识别结果后继续导入。');
+        } catch (error) {
+          pendingImportFile = null;
+          const message = error instanceof Error ? error.message : '导入前检查失败';
+          setPreviewStatus(message, 'error');
+          renderPreviewRows([], { emptyText: '未识别到可导入的数据' });
+        }
+      });
+
+      importPreviewConfirm?.addEventListener('click', () => {
+        if(!importPreviewConfirm || importPreviewConfirm.disabled){
+          return;
+        }
+        if(!fileInput?.files?.length || !importForm || !pendingImportFile){
+          return;
+        }
+        setPreviewStatus('正在导入，请稍候…');
+        importPreviewConfirm.disabled = true;
+        importPreviewConfirm.textContent = '正在导入…';
+        syncImportStore();
+        if(typeof importForm.requestSubmit === 'function'){
+          importForm.requestSubmit();
+        } else {
+          importForm.submit();
+        }
+      });
 
       // menu toggles
       const menuPairs = [
