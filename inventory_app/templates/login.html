@@ -1,82 +1,260 @@
 <!doctype html>
-<html lang="zh" data-theme="light">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>登录 · 库存控制中心</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: ['class'],
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
-            },
-            colors: {
-              brand: {
-                50: '#F4F6FF',
-                100: '#E9EDFF',
-                200: '#C7D0FF',
-                300: '#A4B4FF',
-                400: '#8097FF',
-                500: '#5D7BFF',
-                600: '#3A5EFF',
-                700: '#2447E6',
-                800: '#1B34B0',
-                900: '#14257F'
-              }
-            },
-            boxShadow: {
-              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)'
-            }
-          }
-        }
-      }
-    </script>
     <style>
-      :root { color-scheme: light dark; }
+      :root {
+        color-scheme: light dark;
+        --accent: #3d5af1;
+        --accent-strong: #2c3ddc;
+        --bg: #f4f6fb;
+        --fg: #1f2937;
+        --muted: #6b7280;
+        --surface: rgba(255, 255, 255, 0.9);
+        --border: rgba(148, 163, 184, 0.4);
+        --shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+      }
+      :root.dark {
+        --bg: #0f172a;
+        --fg: #f1f5f9;
+        --muted: #94a3b8;
+        --surface: rgba(15, 23, 42, 0.75);
+        --border: rgba(148, 163, 184, 0.18);
+        --shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+      }
+      * { box-sizing: border-box; }
       html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+      }
+      .auth-shell {
+        width: min(960px, 100%);
+        background: linear-gradient(145deg, rgba(61,90,241,0.18), transparent 60%), var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        overflow: hidden;
+        min-height: 520px;
+      }
+      .auth-shell__intro {
+        padding: 48px 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: linear-gradient(160deg, rgba(61,90,241,0.6), rgba(255,255,255,0));
+      }
+      .auth-shell__intro h1 {
+        margin: 0;
+        font-size: clamp(28px, 3vw, 36px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .auth-shell__intro p {
+        margin-top: 16px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .auth-shell__intro ul {
+        margin: 32px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 14px;
+      }
+      .auth-shell__intro li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 14px;
+      }
+      .auth-shell__intro li span {
+        display: inline-flex;
+        width: 28px;
+        height: 28px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.35);
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .auth-shell__form {
+        padding: 48px 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 32px;
+        background: var(--surface);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .brand svg { width: 18px; height: 18px; }
+      .form-card {
+        display: grid;
+        gap: 20px;
+      }
+      .form-card h2 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: -0.01em;
+      }
+      .form-card p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      form {
+        display: grid;
+        gap: 18px;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      input[type="text"],
+      input[type="password"] {
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,0.8);
+        border-radius: 14px;
+        padding: 12px 16px;
+        font-size: 15px;
+        color: var(--fg);
+      }
+      :root.dark input[type="text"],
+      :root.dark input[type="password"] {
+        background: rgba(15,23,42,0.6);
+      }
+      input:focus {
+        outline: 2px solid rgba(61,90,241,0.35);
+        outline-offset: 2px;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      .theme-toggle {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 6px 12px;
+        background: transparent;
+        color: var(--muted);
+      }
+      .primary-btn {
+        border: none;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        padding: 14px 18px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+        box-shadow: 0 15px 35px rgba(61, 90, 241, 0.32);
+      }
+      .primary-btn:active {
+        transform: translateY(1px);
+        box-shadow: 0 10px 18px rgba(61, 90, 241, 0.28);
+      }
+      .alert {
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 14px;
+        background: rgba(220, 38, 38, 0.12);
+        color: #b91c1c;
+        border: 1px solid rgba(248, 113, 113, 0.4);
+      }
+      :root.dark .alert {
+        background: rgba(248, 113, 113, 0.08);
+        color: #fca5a5;
+        border-color: rgba(248, 113, 113, 0.2);
+      }
+      @media (max-width: 880px) {
+        body { padding: 16px; }
+        .auth-shell { grid-template-columns: 1fr; }
+        .auth-shell__intro { display: none; }
+      }
     </style>
   </head>
-  <body class="min-h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased">
-    <main class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div class="max-w-md w-full space-y-8">
-        <div class="text-center space-y-3">
-          <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/40 dark:border-white/10 text-slate-700 dark:text-slate-200">
-            库存控制中心 <span class="opacity-60">安全登录</span>
-          </span>
-          <h1 class="text-3xl font-bold tracking-tight">欢迎回来</h1>
-          <p class="text-sm text-slate-500 dark:text-slate-400">请使用您的账号登录，继续管理库存。</p>
+  <body>
+    <div class="auth-shell">
+      <section class="auth-shell__intro">
+        <div>
+          <div class="brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+            </svg>
+            库存控制中心
+          </div>
+          <h1>欢迎回到您的运营中枢</h1>
+          <p>实时掌握库存变化、分析经营趋势、协同团队成员。登录后即可管理门店与商品，并追踪所有出入库动态。</p>
         </div>
-        <form method="post" class="mt-8 space-y-6 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 backdrop-blur px-6 py-8 shadow-xlsoft">
-          {% if error %}
-            <div class="rounded-lg border border-red-300/60 bg-red-50 text-red-600 px-3 py-2 text-sm dark:border-red-500/40 dark:bg-red-900/30 dark:text-red-200">
-              {{ error }}
-            </div>
-          {% endif %}
-          <div class="space-y-4">
-            <label class="block text-left">
-              <span class="text-sm text-slate-500">用户名</span>
-              <input type="text" name="username" autocomplete="username" required class="mt-1 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60" placeholder="请输入用户名" />
+        <ul>
+          <li><span>1</span>安全的角色权限控制，确保敏感数据仅对授权人员可见。</li>
+          <li><span>2</span>直观的数据概览，让库存风险、补货需求一目了然。</li>
+          <li><span>3</span>完善的操作记录，快速回溯每一次调整与调拨。</li>
+        </ul>
+      </section>
+      <section class="auth-shell__form">
+        <div class="form-card">
+          <div>
+            <h2>登录账号</h2>
+            <p>输入系统分配的账号密码开始工作。</p>
+          </div>
+          <form method="post">
+            {% if error %}
+              <div class="alert">{{ error }}</div>
+            {% endif %}
+            <label>
+              用户名
+              <input type="text" name="username" autocomplete="username" required placeholder="请输入用户名" />
             </label>
-            <label class="block text-left">
-              <span class="text-sm text-slate-500">密码</span>
-              <input type="password" name="password" autocomplete="current-password" required class="mt-1 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60" placeholder="请输入密码" />
+            <label>
+              密码
+              <input type="password" name="password" autocomplete="current-password" required placeholder="请输入密码" />
             </label>
             {% if next %}
               <input type="hidden" name="next" value="{{ next }}" />
             {% endif %}
-          </div>
-          <div class="flex items-center justify-end text-xs text-slate-400">
-            <button type="button" id="themeSwitch" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">切换主题</button>
-          </div>
-          <div>
-            <button type="submit" class="w-full h-11 rounded-xl bg-brand-600 text-white font-medium hover:brightness-105 transition">登录</button>
-          </div>
-        </form>
-      </div>
-    </main>
+            <div class="actions">
+              <span>忘记密码请联系管理员</span>
+              <button type="button" class="theme-toggle" id="themeSwitch">切换主题</button>
+            </div>
+            <button type="submit" class="primary-btn">进入系统</button>
+          </form>
+        </div>
+      </section>
+    </div>
     <script>
       const root = document.documentElement;
       const stored = localStorage.getItem('theme');
