@@ -1,6 +1,7 @@
 """Inventory management logic for simple Flask app."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -684,6 +685,90 @@ class InventoryManager:
         with self._lock:
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
             self.history_path.write_text("", encoding="utf-8")
+
+    def preview_import_rows(
+        self,
+        rows: Iterable[Dict[str, Any]],
+        *,
+        store_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return normalized preview data for a batch import without mutating state."""
+
+        preview: List[Dict[str, Any]] = []
+        with self._lock:
+            state = self._load_state_locked()
+            state_copy = deepcopy(state)
+            resolved_store = self._normalize_store_id(state_copy, store_id)
+            categories = state_copy["categories"]
+            for index, row in enumerate(rows, start=1):
+                entry: Dict[str, Any] = {
+                    "index": index,
+                    "valid": False,
+                    "name": "",
+                    "quantity": None,
+                    "unit": "",
+                    "threshold": None,
+                    "threshold_field_present": False,
+                    "category_id": _UNCATEGORIZED_ID,
+                    "category_name": categories.get(_UNCATEGORIZED_ID, {}).get(
+                        "name", _UNCATEGORIZED_NAME
+                    ),
+                    "category_input": "",
+                    "messages": [],
+                }
+                if not isinstance(row, dict):
+                    entry["messages"].append("无法识别的行格式")
+                    preview.append(entry)
+                    continue
+                name = str(row.get("name") or "").strip()
+                entry["name"] = name
+                if not name:
+                    entry["messages"].append("缺少 SKU 名称")
+                quantity_raw = row.get("quantity")
+                quantity: Optional[int]
+                try:
+                    quantity = int(quantity_raw)
+                    if quantity < 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    entry["messages"].append("数量必须为非负整数")
+                    quantity = None
+                entry["quantity"] = quantity
+                unit_value = row.get("unit")
+                entry["unit"] = "" if unit_value is None else str(unit_value).strip()
+                threshold_raw = None
+                threshold_field_present = False
+                for key in ("threshold", "阈值提醒", "阈值"):
+                    if key in row:
+                        threshold_raw = row.get(key)
+                        threshold_field_present = True
+                        break
+                entry["threshold_field_present"] = threshold_field_present
+                threshold = _normalize_threshold(threshold_raw)
+                entry["threshold"] = threshold
+                if threshold_field_present:
+                    raw_text = "" if threshold_raw is None else str(threshold_raw).strip()
+                    if raw_text and threshold is None:
+                        entry["messages"].append("阈值格式无效")
+                category_raw = None
+                for key in ("category", "分类", "库存分类"):
+                    if key in row:
+                        category_raw = row.get(key)
+                        break
+                entry["category_input"] = (
+                    "" if category_raw is None else str(category_raw).strip()
+                )
+                category_id = self._ensure_category(state_copy, category_raw)
+                entry["category_id"] = category_id
+                category_record = state_copy["categories"].get(category_id, {})
+                entry["category_name"] = category_record.get(
+                    "name", category_id or _UNCATEGORIZED_NAME
+                )
+                entry["store_id"] = resolved_store
+                if name and quantity is not None and not entry["messages"]:
+                    entry["valid"] = True
+                preview.append(entry)
+        return preview
 
     def import_items(
         self,
