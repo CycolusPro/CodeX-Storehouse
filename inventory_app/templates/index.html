@@ -435,20 +435,31 @@
       }
       .pagination form { display: flex; align-items: center; gap: 6px; }
       .pagination select { padding: 8px 12px; }
-      .timeline-panel .panel__header {
-        align-items: flex-start;
-        gap: 16px;
-      }
       .timeline-header {
+        display: flex;
         flex-direction: column;
+        gap: 12px;
+      }
+      .timeline-header__main {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
       .timeline-header__title {
         display: flex;
         flex-direction: column;
         gap: 4px;
       }
-      .timeline-actions {
+      .timeline-header__meta {
         display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .timeline-actions {
+        display: inline-flex;
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
@@ -591,19 +602,20 @@
         }
       }
       @media (min-width: 960px) {
-        .timeline-panel .panel__header {
-          align-items: center;
-        }
         .timeline-header {
           flex-direction: row;
           align-items: center;
           justify-content: space-between;
-          gap: 16px;
+          gap: 24px;
         }
-        .timeline-header__title {
+        .timeline-header__main {
           flex-direction: row;
           align-items: baseline;
-          gap: 12px;
+          gap: 18px;
+        }
+        .timeline-header__title {
+          flex-direction: column;
+          gap: 6px;
         }
         .timeline-actions {
           margin-left: auto;
@@ -1036,11 +1048,13 @@
 
             {% if permissions.can_view_history %}
               <aside class="panel timeline-panel">
-                <div class="panel__header timeline-header">
-                  <div class="timeline-header__title">
-                    <h2>最近动态</h2>
-                    <div class="panel__meta">
-                      共 {{ timeline_pagination.total }} 条
+                <header class="timeline-header">
+                  <div class="timeline-header__main">
+                    <div class="timeline-header__title">
+                      <h2>最近动态</h2>
+                    </div>
+                    <div class="timeline-header__meta">
+                      <span>共 {{ timeline_pagination.total }} 条</span>
                       {% if timeline_is_demo %}
                         <span class="timeline-demo-chip">演示数据</span>
                       {% endif %}
@@ -1054,7 +1068,7 @@
                       </form>
                     {% endif %}
                   </div>
-                </div>
+                </header>
                 <div class="timeline-toolbar">
                   <div class="timeline-filters">
                     <form method="get" action="{{ url_for('index') }}">

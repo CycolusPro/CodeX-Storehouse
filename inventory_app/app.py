@@ -1727,6 +1727,18 @@ def _demo_timeline_events() -> list[Dict[str, Any]]:
             ],
         },
         {
+            "type": "调拨",
+            "badge": "neutral",
+            "timestamp": now - timedelta(hours=9, minutes=5),
+            "name": "可可碎粒",
+            "user": "李倩",
+            "details": [
+                "从旗舰店 → 益田路门店",
+                "数量 15 千克",
+                "调拨后库存：旗舰店 40 千克 / 益田路 28 千克",
+            ],
+        },
+        {
             "type": "盘点",
             "badge": "neutral",
             "timestamp": now - timedelta(days=1, hours=1),
@@ -1749,6 +1761,30 @@ def _demo_timeline_events() -> list[Dict[str, Any]]:
                 "初始数量 60 瓶",
                 "门店：旗舰店",
                 "分类：饮品原料",
+            ],
+        },
+        {
+            "type": "出库",
+            "badge": "warning",
+            "timestamp": now - timedelta(days=2, hours=6, minutes=10),
+            "name": "榛果糖浆",
+            "user": "赵彤",
+            "details": [
+                "数量 -12 瓶",
+                "用于门店促销活动",
+                "现有库存 48 瓶",
+            ],
+        },
+        {
+            "type": "调整",
+            "badge": "success",
+            "timestamp": now - timedelta(days=3, minutes=45),
+            "name": "手工饼干礼盒",
+            "user": "周琪",
+            "details": [
+                "补录供应商赠品 +30 盒",
+                "新的库存基线 120 盒",
+                "门店：益田路门店",
             ],
         },
     ]
