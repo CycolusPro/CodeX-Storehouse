@@ -399,6 +399,16 @@
         gap: 16px;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       }
+      .inventory-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .inventory-actions form {
+        margin: 0;
+        display: inline-flex;
+      }
       .inventory-form label {
         display: grid;
         gap: 8px;
@@ -425,17 +435,31 @@
       }
       .pagination form { display: flex; align-items: center; gap: 6px; }
       .pagination select { padding: 8px 12px; }
-      .timeline-controls {
-        display: grid;
+      .timeline-panel .panel__header {
+        align-items: flex-start;
         gap: 16px;
+      }
+      .timeline-header {
+        flex-direction: column;
+      }
+      .timeline-header__title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
       .timeline-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+        align-items: center;
       }
       .timeline-actions form {
         margin: 0;
+        display: inline-flex;
+      }
+      .timeline-toolbar {
+        display: grid;
+        gap: 16px;
       }
       .timeline-filters {
         display: grid;
@@ -530,7 +554,7 @@
       :root.dark .timeline-badge.success { color: #34d399; }
       :root.dark .timeline-badge.danger { color: #fca5a5; }
       @media (min-width: 720px) {
-        .timeline-controls {
+        .timeline-toolbar {
           gap: 20px;
         }
         .timeline-filters {
@@ -541,6 +565,52 @@
         }
         .timeline-filters form {
           flex: 0 1 220px;
+        }
+      }
+      @media (min-width: 960px) {
+        .timeline-panel .panel__header {
+          align-items: center;
+        }
+        .timeline-header {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        .timeline-header__title {
+          flex-direction: row;
+          align-items: baseline;
+          gap: 12px;
+        }
+        .timeline-actions {
+          margin-left: auto;
+          flex-wrap: nowrap;
+          gap: 10px;
+        }
+        .timeline-actions form {
+          width: auto;
+        }
+        .timeline-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+        .timeline-filters {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 16px;
+        }
+        .timeline-filters form {
+          flex: 0 0 auto;
+        }
+        .timeline-filters label {
+          width: auto;
+        }
+        .timeline-pagination {
+          justify-content: flex-end;
+          gap: 16px;
         }
       }
       @media (min-width: 640px) {
@@ -901,68 +971,38 @@
                         </div>
                         <span class="quantity-chip">{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</span>
                       </div>
-                      <form class="inventory-form" method="post" action="/submit">
+                      <div class="inventory-actions">
                         {% if permissions.can_manage_items %}
-                          <label>
-                            设置数量
-                            <input id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}" />
-                          </label>
+                          <button
+                            class="btn btn--outline"
+                            type="button"
+                            data-manage
+                            data-name="{{ item.name|e }}"
+                            data-quantity="{{ item.quantity }}"
+                            data-unit="{{ (item.unit or '')|e }}"
+                            data-category="{{ item.category or 'uncategorized' }}"
+                            data-category-name="{{ (category_info.name if category_info else '未分类')|e }}"
+                            data-threshold="{{ item.threshold if item.threshold is not none else '' }}"
+                          >管理</button>
                         {% endif %}
-                        <label>
-                          单位
-                          {% if permissions.can_manage_items %}
-                            <input id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
-                          {% else %}
-                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">{{ item.unit or '—' }}</div>
-                            <input type="hidden" name="unit" value="{{ item.unit }}" />
-                          {% endif %}
-                        </label>
-                        <label>
-                          库存分类
-                          {% if permissions.can_manage_categories %}
-                            <select name="category">
-                              {% for category_id, category in categories.items() %}
-                                <option value="{{ category_id }}" {% if category_id == item.category %}selected{% endif %}>{{ category.name }}</option>
-                              {% endfor %}
-                            </select>
-                          {% else %}
-                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">{{ category_info.name if category_info else '未分类' }}</div>
-                            <input type="hidden" name="category" value="{{ item.category }}" />
-                          {% endif %}
-                        </label>
-                        <label>
-                          阈值提醒{% if permissions.can_manage_threshold %}（可选）{% else %}（仅管理员可改）{% endif %}
-                          {% if permissions.can_manage_threshold %}
-                            <input id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
-                          {% else %}
-                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">
-                              {% if item.threshold is not none %}
-                                ≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}
-                              {% else %}
-                                未设置阈值
-                              {% endif %}
-                            </div>
-                            <input type="hidden" name="threshold" value="{{ item.threshold if item.threshold is not none else '' }}" />
-                          {% endif %}
-                        </label>
-                        <div class="actions">
-                          <input type="hidden" name="name" value="{{ item.name }}" />
-                          <input type="hidden" name="store_id" value="{{ selected_store }}" />
-                          {% if permissions.can_adjust_in %}
-                            <button class="btn btn--outline" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
-                          {% endif %}
-                          {% if permissions.can_adjust_out %}
-                            <button class="btn btn--outline" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
-                          {% endif %}
-                          {% if permissions.can_manage_items and stores|length > 1 %}
-                            <button class="btn btn--outline" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
-                          {% endif %}
-                          {% if permissions.can_manage_items %}
-                            <button class="btn btn--primary" type="submit" name="action" value="update">保存修改</button>
-                            <button class="btn btn--danger" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
-                          {% endif %}
-                        </div>
-                      </form>
+                        {% if permissions.can_adjust_in %}
+                          <button class="btn btn--outline" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
+                        {% endif %}
+                        {% if permissions.can_adjust_out %}
+                          <button class="btn btn--outline" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
+                        {% endif %}
+                        {% if permissions.can_manage_items and stores|length > 1 %}
+                          <button class="btn btn--outline" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
+                        {% endif %}
+                        {% if permissions.can_manage_items %}
+                          <form method="post" action="/submit" onsubmit="return confirm('确认删除 {{ item.name }} 吗？');">
+                            <input type="hidden" name="action" value="delete" />
+                            <input type="hidden" name="name" value="{{ item.name }}" />
+                            <input type="hidden" name="store_id" value="{{ selected_store }}" />
+                            <button class="btn btn--danger" type="submit">删除</button>
+                          </form>
+                        {% endif %}
+                      </div>
                     </div>
                   {% endfor %}
                 </div>
@@ -972,12 +1012,12 @@
             </section>
 
             {% if permissions.can_view_history %}
-              <aside class="panel">
-                <div class="panel__header">
-                  <h2>最近动态</h2>
-                  <div class="panel__meta">共 {{ timeline_pagination.total }} 条</div>
-                </div>
-                <div class="timeline-controls">
+              <aside class="panel timeline-panel">
+                <div class="panel__header timeline-header">
+                  <div class="timeline-header__title">
+                    <h2>最近动态</h2>
+                    <div class="panel__meta">共 {{ timeline_pagination.total }} 条</div>
+                  </div>
                   <div class="timeline-actions">
                     <a class="btn btn--outline" href="/api/history/export">导出记录</a>
                     {% if permissions.can_clear_history %}
@@ -986,6 +1026,8 @@
                       </form>
                     {% endif %}
                   </div>
+                </div>
+                <div class="timeline-toolbar">
                   <div class="timeline-filters">
                     <form method="get" action="{{ url_for('index') }}">
                       {% for key, values in preserved_query.items() %}
@@ -1108,6 +1150,35 @@
         </div>
       </div>
     </div>
+
+    {% if permissions.can_manage_items %}
+      <div id="manageModal" class="modal hidden" data-modal>
+        <div class="modal__dialog" style="max-width:560px;">
+          <button type="button" class="modal__close" data-close-modal>&times;</button>
+          <h2 style="margin:0; font-size:22px;">管理 SKU</h2>
+          <p id="manageSummary" class="panel__meta"></p>
+          <form method="post" action="/submit" class="inventory-form" novalidate id="manageForm">
+            <input type="hidden" name="action" value="update" />
+            <input type="hidden" name="name" id="manageName" />
+            <input type="hidden" name="store_id" value="{{ selected_store }}" />
+            <label>设置数量<input name="quantity" id="manageQuantity" type="number" min="0" step="1" /></label>
+            <label>单位<input name="unit" id="manageUnit" placeholder="件" /></label>
+            <label>库存分类
+              <select name="category" id="manageCategory">
+                {% for category_id, category in categories.items() %}
+                  <option value="{{ category_id }}">{{ category.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>阈值提醒（可选）<input name="threshold" id="manageThreshold" type="number" min="0" step="1" placeholder="例如 10" /></label>
+            <div class="actions" style="justify-content:flex-end;">
+              <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
+              <button type="submit" class="btn btn--primary">保存修改</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
 
     <div id="addModal" class="modal hidden" data-modal>
       <div class="modal__dialog" style="max-width:600px;">
@@ -1329,6 +1400,66 @@
           if(event.target === modal) closeModal(`#${modal.id}`);
         });
       });
+
+      (function setupManageModal(){
+        const manageModal = document.getElementById('manageModal');
+        if(!manageModal) return;
+        const manageButtons = document.querySelectorAll('[data-manage]');
+        if(!manageButtons.length) return;
+        const nameInput = document.getElementById('manageName');
+        const quantityInput = document.getElementById('manageQuantity');
+        const unitInput = document.getElementById('manageUnit');
+        const thresholdInput = document.getElementById('manageThreshold');
+        const categorySelect = document.getElementById('manageCategory');
+        const summary = document.getElementById('manageSummary');
+        manageButtons.forEach(button => {
+          button.addEventListener('click', () => {
+            const name = button.getAttribute('data-name') || '';
+            const unit = button.getAttribute('data-unit') || '';
+            const quantity = button.getAttribute('data-quantity') || '';
+            const threshold = button.getAttribute('data-threshold') || '';
+            const category = button.getAttribute('data-category') || '';
+            const categoryName = button.getAttribute('data-category-name') || '未分类';
+            if(nameInput) {
+              nameInput.value = name;
+            }
+            if(quantityInput) {
+              quantityInput.value = quantity;
+              const placeholderUnit = unit ? ` ${unit}` : '';
+              quantityInput.placeholder = quantity
+                ? `当前 ${quantity}${placeholderUnit}`
+                : '请输入数量';
+            }
+            if(unitInput) {
+              unitInput.value = unit;
+            }
+            if(thresholdInput) {
+              thresholdInput.value = threshold;
+            }
+            if(categorySelect) {
+              let matched = false;
+              Array.from(categorySelect.options).forEach(option => {
+                if(option.value === category) {
+                  option.selected = true;
+                  matched = true;
+                }
+              });
+              if(!matched && categorySelect.options.length) {
+                categorySelect.selectedIndex = 0;
+              }
+            }
+            if(summary) {
+              const unitSuffix = unit ? ` ${unit}` : '';
+              const quantityText = quantity !== '' ? quantity : '0';
+              summary.textContent = `${name} · 当前库存 ${quantityText}${unitSuffix} · 分类：${categoryName}`;
+            }
+            openModal('#manageModal');
+            setTimeout(() => {
+              quantityInput?.focus();
+            }, 120);
+          });
+        });
+      })();
 
       (function setupAdjustModal(){
         const adjustModal = document.getElementById('adjustModal');
