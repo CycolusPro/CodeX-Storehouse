@@ -701,6 +701,20 @@
         display: grid;
         gap: 20px;
       }
+      #lowStockModal .modal__dialog {
+        max-height: min(90vh, 720px);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      #lowStockModal .modal__body {
+        flex: 1 1 auto;
+        overflow: auto;
+      }
+      #lowStockModal .modal__footer {
+        display: flex;
+        justify-content: flex-end;
+      }
       .modal__close {
         position: absolute;
         top: 16px;
@@ -1060,25 +1074,27 @@
           <button type="button" class="modal__close" data-close-modal>&times;</button>
           <h2 style="margin:0; font-size:22px;">库存预警列表</h2>
           <p class="panel__meta">以下 SKU 库存不及阈值，请尽快安排补货。</p>
-          <table>
-            <thead>
-              <tr>
-                <th>SKU 名称</th>
-                <th>当前库存</th>
-                <th>阈值</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in low_stock_items %}
+          <div class="modal__body">
+            <table>
+              <thead>
                 <tr>
-                  <td>{{ item.name }}</td>
-                  <td>{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
-                  <td>{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                  <th>SKU 名称</th>
+                  <th>当前库存</th>
+                  <th>阈值</th>
                 </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div style="display:flex; justify-content:flex-end;">
+              </thead>
+              <tbody>
+                {% for item in low_stock_items %}
+                  <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                    <td>{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="modal__footer">
             <button class="btn btn--primary" data-close-modal>知道了</button>
           </div>
         </div>
