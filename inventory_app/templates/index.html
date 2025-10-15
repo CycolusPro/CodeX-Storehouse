@@ -93,9 +93,12 @@
               <button class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm" data-open-modal="#storeModal">门店管理</button>
             {% endif %}
           </div>
-          <div class="relative flex-1 min-w-[180px] max-w-md">
-            <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
-            <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <div class="flex items-center gap-2 flex-1 min-w-[180px] max-w-md">
+            <div class="relative flex-1">
+              <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+              <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </div>
+            <button type="button" data-search-button data-input-selector="#keyword" class="h-10 px-4 rounded-xl bg-brand-600 text-white text-sm font-medium hover:brightness-105 transition">搜索</button>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <select id="categoryFilter" data-category-filter class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 text-sm">
@@ -117,8 +120,8 @@
                 </button>
                 <div id="actionsMenu" class="hidden absolute right-0 mt-2 w-48 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft p-1 text-sm z-50" role="menu" aria-labelledby="actionsMenuBtn">
                   <button type="button" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" data-open-modal="#addModal" role="menuitem">新增 SKU</button>
-                  <button type="button" id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从 CSV 导入</button>
-                  <a href="/api/items/export" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">导出库存 CSV</a>
+                  <button type="button" id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从表格导入</button>
+                  <a href="/api/items/export" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">导出库存表格</a>
                   <a href="/api/items/template" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">下载导入模板</a>
                 </div>
               </div>
@@ -166,9 +169,12 @@
               <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#storeModal">管理</button>
             {% endif %}
           </form>
-          <div class="w-full relative">
-            <input data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
-            <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <div class="w-full flex items-center gap-2">
+            <div class="relative flex-1">
+              <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+              <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </div>
+            <button type="button" data-search-button data-input-selector="#keywordMobile" class="h-10 px-4 rounded-lg bg-brand-600 text-white font-medium">搜索</button>
           </div>
           <div class="w-full flex items-center gap-2">
             <select data-category-filter class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
@@ -927,7 +933,6 @@
       });
 
       const keywordInputs = document.querySelectorAll('[data-keyword-input]');
-      let keywordTimer = null;
       function submitKeyword(value){
         const url = new URL(window.location.href);
         const trimmed = value.trim();
@@ -955,25 +960,31 @@
               other.value = value;
             }
           });
-          if(keywordTimer){
-            clearTimeout(keywordTimer);
-          }
-          keywordTimer = setTimeout(() => submitKeyword(value), 400);
         });
         input.addEventListener('keydown', (event) => {
           if(event.key === 'Enter'){
             event.preventDefault();
-            if(keywordTimer){
-              clearTimeout(keywordTimer);
-            }
             submitKeyword(input.value);
           }
         });
         input.addEventListener('search', () => {
-          if(keywordTimer){
-            clearTimeout(keywordTimer);
-          }
           submitKeyword(input.value);
+        });
+      });
+
+      document.querySelectorAll('[data-search-button]').forEach(button => {
+        button.addEventListener('click', () => {
+          const selector = button.getAttribute('data-input-selector');
+          let value = '';
+          if(selector){
+            const target = document.querySelector(selector);
+            if(target){
+              value = target.value;
+            }
+          } else if(keywordInputs.length){
+            value = keywordInputs[0].value;
+          }
+          submitKeyword(value);
         });
       });
 

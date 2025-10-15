@@ -410,6 +410,7 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
         "入库数量",
         "出库数量",
         "净变动",
+        "截止库存",
     ]
     export_rows = [dict(zip(header, row)) for row in raw_reader if any(row)]
     assert export_rows
@@ -419,6 +420,8 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
     outbound_total = int(totals_row["出库数量"])
     assert inbound_total >= 0
     assert outbound_total >= 0
+    cutoff_total = int(totals_row["截止库存"])
+    assert cutoff_total >= 0
 
 
 def test_transfer_api_endpoint(tmp_path: Path) -> None:
@@ -523,7 +526,9 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     assert "inventory_export" in export_resp.headers["Content-Disposition"]
     export_text = export_resp.data.decode("utf-8-sig")
     header = export_text.splitlines()[0]
-    assert "name" in header and "threshold" in header
+    columns = header.split(",")
+    assert "SKU 名称" in columns
+    assert "库存阈值" in columns
     assert "咖啡豆" in export_text
 
     template_resp = client.get("/api/items/template")

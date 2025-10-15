@@ -120,7 +120,7 @@
               </label>
               <div class="flex flex-col gap-2 sm:flex-row sm:col-span-2 lg:col-span-2 xl:col-span-2">
                 <button type="submit" class="w-full h-11 inline-flex items-center justify-center rounded-xl bg-brand-600 text-white text-sm font-medium hover:brightness-105 transition">更新</button>
-                <a href="{{ export_url }}" class="w-full h-11 inline-flex items-center justify-center rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm font-medium hover:bg-brand-500/10 transition">导出 CSV</a>
+                <a href="{{ export_url }}" class="w-full h-11 inline-flex items-center justify-center rounded-xl border border-brand-500/40 text-brand-700 dark:text-brand-200 text-sm font-medium hover:bg-brand-500/10 transition">导出表格</a>
               </div>
             </form>
           </div>
@@ -156,6 +156,7 @@
                 <th class="px-4 py-2 text-left font-medium text-slate-500">入库数量</th>
                 <th class="px-4 py-2 text-left font-medium text-slate-500">出库数量</th>
                 <th class="px-4 py-2 text-left font-medium text-slate-500">净变动</th>
+                <th class="px-4 py-2 text-left font-medium text-slate-500">截止库存</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-200/60 dark:divide-white/10">
@@ -167,6 +168,7 @@
                   <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ row.inbound }}</td>
                   <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ row.outbound }}</td>
                   <td class="px-4 py-2 text-brand-600">{{ row.net }}</td>
+                  <td class="px-4 py-2 text-slate-700 dark:text-slate-200">{{ row.ending_quantity if row.ending_quantity is not none else '—' }}</td>
                 </tr>
               {% endfor %}
               <tr class="bg-slate-100/40 dark:bg-white/10 font-medium">
@@ -176,6 +178,7 @@
                 <td class="px-4 py-2 text-emerald-600 dark:text-emerald-400">{{ totals.inbound }}</td>
                 <td class="px-4 py-2 text-amber-600 dark:text-amber-400">{{ totals.outbound }}</td>
                 <td class="px-4 py-2 text-brand-600">{{ totals.net }}</td>
+                <td class="px-4 py-2 text-slate-700 dark:text-slate-200">{{ totals.ending_quantity }}</td>
               </tr>
             </tbody>
           </table>

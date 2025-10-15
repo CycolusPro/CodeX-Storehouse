@@ -702,22 +702,30 @@ def create_app(
     def export_inventory() -> Response:
         selected_store = _resolve_store_id(request.args.get("store_id"))
         rows = manager.export_items(store_id=selected_store)
-        fieldnames = [
-            "store_id",
-            "store_name",
-            "category_id",
-            "category_name",
-            "name",
-            "quantity",
-            "unit",
-            "created_at",
-            "last_in",
-            "last_in_delta",
-            "last_out",
-            "last_out_delta",
-            "threshold",
+        header_map = [
+            ("store_id", "门店 ID"),
+            ("store_name", "门店名称"),
+            ("category_id", "分类 ID"),
+            ("category_name", "分类名称"),
+            ("name", "SKU 名称"),
+            ("quantity", "库存数量"),
+            ("unit", "单位"),
+            ("created_at", "创建时间"),
+            ("last_in", "最近入库时间"),
+            ("last_in_delta", "最近入库数量"),
+            ("last_out", "最近出库时间"),
+            ("last_out_delta", "最近出库数量"),
+            ("threshold", "库存阈值"),
         ]
-        content = _rows_to_csv(fieldnames, rows)
+        localized_rows = []
+        for row in rows:
+            localized_row = {}
+            for key, label in header_map:
+                value = row.get(key, "") if isinstance(row, dict) else ""
+                localized_row[label] = "" if value is None else value
+            localized_rows.append(localized_row)
+        fieldnames = [label for _, label in header_map]
+        content = _rows_to_csv(fieldnames, localized_rows)
         filename = _timestamped_filename("inventory_export")
         return _csv_response(content, filename)
 
@@ -842,10 +850,14 @@ def create_app(
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
         total_inbound = sum(row["inbound"] for row in stats_rows)
         total_outbound = sum(row["outbound"] for row in stats_rows)
+        total_ending = sum(
+            row.get("ending_quantity") or 0 for row in stats_rows if isinstance(row, dict)
+        )
         totals = {
             "inbound": total_inbound,
             "outbound": total_outbound,
             "net": total_inbound - total_outbound,
+            "ending_quantity": total_ending,
         }
         export_params = {"mode": mode}
         export_params["store_id"] = selected_store
@@ -882,17 +894,23 @@ def create_app(
         mode = "sku"
         entries = manager.list_history(store_id=selected_store)
         stats_rows = _history_statistics(entries, mode=mode, start=start_dt, end=end_dt)
-        csv_rows = [
-            {
-                "SKU 名称": row.get("sku") or row.get("label", ""),
-                "分类": row.get("category", ""),
-                "单位": row.get("unit", ""),
-                "入库数量": row["inbound"],
-                "出库数量": row["outbound"],
-                "净变动": row["net"],
-            }
-            for row in stats_rows
-        ]
+        csv_rows: List[Dict[str, Any]] = []
+        total_ending = 0
+        for row in stats_rows:
+            ending_quantity = row.get("ending_quantity")
+            if isinstance(ending_quantity, int):
+                total_ending += ending_quantity
+            csv_rows.append(
+                {
+                    "SKU 名称": row.get("sku") or row.get("label", ""),
+                    "分类": row.get("category", ""),
+                    "单位": row.get("unit", ""),
+                    "入库数量": row["inbound"],
+                    "出库数量": row["outbound"],
+                    "净变动": row["net"],
+                    "截止库存": "" if ending_quantity is None else ending_quantity,
+                }
+            )
         if not csv_rows:
             csv_rows.append(
                 {
@@ -902,11 +920,13 @@ def create_app(
                     "入库数量": 0,
                     "出库数量": 0,
                     "净变动": 0,
+                    "截止库存": 0,
                 }
             )
         else:
             total_inbound = sum(row["入库数量"] for row in csv_rows)
             total_outbound = sum(row["出库数量"] for row in csv_rows)
+            total_net = total_inbound - total_outbound
             csv_rows.append(
                 {
                     "SKU 名称": "合计",
@@ -914,10 +934,19 @@ def create_app(
                     "单位": "",
                     "入库数量": total_inbound,
                     "出库数量": total_outbound,
-                    "净变动": total_inbound - total_outbound,
+                    "净变动": total_net,
+                    "截止库存": total_ending,
                 }
             )
-        fieldnames = ["SKU 名称", "分类", "单位", "入库数量", "出库数量", "净变动"]
+        fieldnames = [
+            "SKU 名称",
+            "分类",
+            "单位",
+            "入库数量",
+            "出库数量",
+            "净变动",
+            "截止库存",
+        ]
         stores_map = _list_stores()
         store_name = stores_map.get(selected_store, {}).get("name", selected_store)
         range_label = f"{start_value} 至 {end_value}" if start_value or end_value else "—"
@@ -1326,9 +1355,14 @@ def _resolve_history_filters(
     today = today_local.replace(tzinfo=None)
     if mode == "day":
         span = timedelta(days=13)
-    else:
+    elif mode == "month":
         span = timedelta(days=180)
-    default_start = today - span
+    else:
+        span = timedelta(days=0)
+    if mode == "sku":
+        default_start = today
+    else:
+        default_start = today - span
     start_dt = _parse_date_arg(start_raw) or default_start
     end_dt = _parse_date_arg(end_raw) or today
     if end_dt < start_dt:
@@ -1348,11 +1382,10 @@ def _history_statistics(
 ) -> List[Dict[str, Any]]:
     normalized_mode = "sku" if mode == "sku" else "day" if mode == "day" else "month"
     buckets: Dict[str, Dict[str, Any]] = {}
-    for entry in entries:
+    ordered_entries = sorted(entries, key=lambda entry: entry.timestamp)
+    for entry in ordered_entries:
         local_time = entry.timestamp.astimezone()
         naive_time = local_time.replace(tzinfo=None)
-        if start and naive_time < start:
-            continue
         if end and naive_time >= end:
             continue
 
@@ -1364,32 +1397,91 @@ def _history_statistics(
             except (TypeError, ValueError):
                 return None
 
+        if normalized_mode == "sku":
+            sku_name = (entry.name or "").strip() or "未命名 SKU"
+            bucket = buckets.setdefault(
+                sku_name,
+                {
+                    "label": sku_name,
+                    "sku": sku_name,
+                    "unit": "",
+                    "category": "",
+                    "store_name": "",
+                    "inbound": 0,
+                    "outbound": 0,
+                    "last_activity": None,
+                    "ending_quantity": None,
+                    "ending_time": None,
+                },
+            )
+            unit = str(meta.get("unit") or "").strip()
+            if unit:
+                bucket["unit"] = unit
+            category_name = str(meta.get("category_name") or meta.get("category_id") or "").strip()
+            if category_name:
+                bucket["category"] = category_name
+            store_name = str(meta.get("store_name") or meta.get("store_id") or "").strip()
+            if store_name:
+                bucket["store_name"] = store_name
+
+            result_quantity = _parse_int(meta.get("new_quantity"))
+            if result_quantity is None:
+                if entry.action == "create":
+                    result_quantity = _parse_int(meta.get("quantity"))
+                elif entry.action == "delete":
+                    result_quantity = 0
+                else:
+                    previous_quantity = _parse_int(meta.get("previous_quantity"))
+                    delta_value = _parse_int(meta.get("delta"))
+                    if previous_quantity is not None and delta_value is not None:
+                        if entry.action in ("in", "set") and delta_value >= 0:
+                            result_quantity = previous_quantity + abs(delta_value)
+                        elif entry.action in ("out", "set"):
+                            result_quantity = max(previous_quantity - abs(delta_value), 0)
+                    if result_quantity is None:
+                        result_quantity = previous_quantity
+            if result_quantity is not None:
+                last_time = bucket.get("ending_time")
+                if last_time is None or naive_time >= last_time:
+                    bucket["ending_quantity"] = result_quantity
+                    bucket["ending_time"] = naive_time
+
+        if start and naive_time < start:
+            continue
+
         inbound_delta = 0
         outbound_delta = 0
+        include_entry = True
         if entry.action == "in":
             delta_value = _parse_int(meta.get("delta"))
             if delta_value is None:
-                continue
-            inbound_delta = abs(delta_value)
+                include_entry = False
+            else:
+                inbound_delta = abs(delta_value)
         elif entry.action == "out":
             delta_value = _parse_int(meta.get("delta"))
             if delta_value is None:
-                continue
-            outbound_delta = abs(delta_value)
+                include_entry = False
+            else:
+                outbound_delta = abs(delta_value)
         elif entry.action == "set":
             delta_value = _parse_int(meta.get("delta"))
             if delta_value in (None, 0):
-                continue
-            if delta_value > 0:
+                include_entry = False
+            elif delta_value > 0:
                 inbound_delta = delta_value
             else:
                 outbound_delta = abs(delta_value)
         elif entry.action == "create":
             quantity_value = _parse_int(meta.get("quantity"))
             if quantity_value is None or quantity_value <= 0:
-                continue
-            inbound_delta = quantity_value
+                include_entry = False
+            else:
+                inbound_delta = quantity_value
         else:
+            include_entry = False
+
+        if not include_entry:
             continue
 
         if normalized_mode == "day":
@@ -1416,32 +1508,6 @@ def _history_statistics(
                     "sort_key": sort_key,
                 },
             )
-        else:
-            sku_name = (entry.name or "").strip() or "未命名 SKU"
-            label = sku_name
-            bucket = buckets.setdefault(
-                label,
-                {
-                    "label": label,
-                    "sku": sku_name,
-                    "unit": "",
-                    "category": "",
-                    "store_name": "",
-                    "inbound": 0,
-                    "outbound": 0,
-                    "last_activity": None,
-                },
-            )
-            unit = str(meta.get("unit") or "").strip()
-            if unit:
-                bucket["unit"] = unit
-            category_name = str(meta.get("category_name") or meta.get("category_id") or "").strip()
-            if category_name:
-                bucket["category"] = category_name
-            store_name = str(meta.get("store_name") or meta.get("store_id") or "").strip()
-            if store_name:
-                bucket["store_name"] = store_name
-
         bucket["inbound"] += inbound_delta
         bucket["outbound"] += outbound_delta
         if normalized_mode == "sku":
@@ -1463,6 +1529,7 @@ def _history_statistics(
                     "outbound": bucket["outbound"],
                     "net": bucket["inbound"] - bucket["outbound"],
                     "last_activity": bucket.get("last_activity"),
+                    "ending_quantity": bucket.get("ending_quantity"),
                 }
             )
         rows.sort(
