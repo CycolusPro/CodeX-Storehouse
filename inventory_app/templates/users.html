@@ -7,358 +7,574 @@
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f3f5fb;
-        --fg: #1f2937;
+        --bg: #eef1f9;
+        --fg: #111827;
         --muted: #6b7280;
-        --surface: rgba(255, 255, 255, 0.92);
-        --card: rgba(255,255,255,0.8);
+        --surface: rgba(255, 255, 255, 0.94);
+        --panel: rgba(255, 255, 255, 0.82);
         --border: rgba(148, 163, 184, 0.35);
-        --accent: #6366f1;
-        --shadow: 0 24px 45px rgba(15, 23, 42, 0.15);
+        --border-strong: rgba(100, 116, 139, 0.45);
+        --accent: #4c6ef5;
+        --accent-soft: rgba(76, 110, 245, 0.12);
+        --danger: #ef4444;
+        --danger-soft: rgba(239, 68, 68, 0.14);
+        --success: #10b981;
+        --shadow: 0 28px 60px rgba(15, 23, 42, 0.15);
+        --radius-lg: 24px;
+        --radius-md: 16px;
       }
       :root.dark {
-        --bg: #0b1220;
-        --fg: #f1f5f9;
+        --bg: #050a18;
+        --fg: #f8fafc;
         --muted: #94a3b8;
-        --surface: rgba(15, 23, 42, 0.9);
-        --card: rgba(15, 23, 42, 0.75);
-        --border: rgba(148, 163, 184, 0.22);
-        --shadow: 0 24px 45px rgba(2, 6, 23, 0.6);
+        --surface: rgba(12, 18, 36, 0.9);
+        --panel: rgba(12, 18, 36, 0.78);
+        --border: rgba(100, 116, 139, 0.22);
+        --border-strong: rgba(100, 116, 139, 0.35);
+        --shadow: 0 28px 60px rgba(2, 6, 23, 0.6);
+        --danger-soft: rgba(248, 113, 113, 0.18);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
         font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        background: radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 50%), var(--bg);
+        background: radial-gradient(circle at top left, rgba(76, 110, 245, 0.15), transparent 55%),
+                    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.1), transparent 60%),
+                    var(--bg);
         color: var(--fg);
       }
-      header {
+      a { color: inherit; text-decoration: none; }
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+      }
+      .sidebar {
         position: sticky;
         top: 0;
-        z-index: 30;
-        backdrop-filter: blur(16px);
-        background: var(--surface);
-        border-bottom: 1px solid var(--border);
-      }
-      .topbar {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 18px 24px;
+        height: 100vh;
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 24px;
+        padding: 32px 28px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
       }
-      .brand {
+      .sidebar__brand {
         display: flex;
         align-items: center;
         gap: 12px;
         font-weight: 700;
         letter-spacing: -0.02em;
+        font-size: 20px;
       }
-      .brand svg { width: 20px; height: 20px; }
-      nav { display: flex; gap: 12px; flex-wrap: wrap; }
-      .nav-link {
-        padding: 8px 14px;
+      .sidebar__brand svg { width: 22px; height: 22px; }
+      .sidebar__section { display: grid; gap: 14px; font-size: 13px; color: var(--muted); }
+      .sidebar__section strong { color: var(--fg); font-size: 14px; }
+      .sidebar__hint { line-height: 1.6; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
         border-radius: 999px;
-        font-size: 14px;
-        color: var(--muted);
-        border: 1px solid transparent;
-        text-decoration: none;
-      }
-      .nav-link.active {
+        background: var(--accent-soft);
+        border: 1px solid var(--border);
+        font-size: 12px;
         color: var(--fg);
-        border-color: var(--border);
-        background: rgba(99, 102, 241, 0.14);
       }
-      .topbar__right {
-        margin-left: auto;
+      .sidebar__nav { display: grid; gap: 8px; }
+      .nav-btn {
         display: flex;
         align-items: center;
-        gap: 16px;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        background: transparent;
+        font-size: 14px;
+        color: var(--muted);
+        transition: background 0.2s ease, border 0.2s ease, color 0.2s ease;
+      }
+      .nav-btn.active {
+        background: var(--accent-soft);
+        border-color: var(--border);
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .sidebar__footer {
+        margin-top: auto;
+        display: grid;
+        gap: 12px;
         font-size: 13px;
         color: var(--muted);
       }
-      .ghost-btn {
-        padding: 8px 14px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
+      .sidebar__footer form { margin: 0; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: 14px;
+        padding: 10px 16px;
+        border: 1px solid transparent;
         background: transparent;
         color: inherit;
+        font: inherit;
         cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+      }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .btn--primary {
+        background: linear-gradient(135deg, #4c6ef5, #5b8ef9);
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(76, 110, 245, 0.25);
+      }
+      .btn--outline {
+        border-color: var(--border);
+        background: var(--panel);
+      }
+      .btn--ghost {
+        border-color: var(--border);
+        background: transparent;
+        color: var(--fg);
+      }
+      .btn--danger {
+        border-color: rgba(239, 68, 68, 0.4);
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+      :root.dark .btn--danger {
+        border-color: rgba(248, 113, 113, 0.55);
+        color: #fca5a5;
+      }
+      header.main-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(18px);
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .header-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 32px;
+      }
+      .page-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .page-title {
+        margin: 0;
+        font-size: clamp(24px, 3vw, 32px);
+        letter-spacing: -0.03em;
+      }
+      .header-meta { color: var(--muted); font-size: 14px; }
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
       }
       .theme-toggle {
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        background: transparent;
-        display: grid;
-        place-items: center;
-        cursor: pointer;
+        position: relative;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-color: var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        overflow: hidden;
+      }
+      .theme-toggle__icon {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 20px;
+        height: 20px;
+        opacity: 0;
+        transform: scale(0.75) rotate(8deg);
+        transition: opacity 0.28s ease, transform 0.28s ease;
+      }
+      .theme-toggle__icon--sun {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .theme-toggle__icon--moon {
+        transform: scale(0.8) rotate(-10deg);
+      }
+      :root.dark .theme-toggle {
+        background: rgba(76, 110, 245, 0.16);
+        border-color: rgba(99, 102, 241, 0.4);
+        color: #f8fafc;
+      }
+      :root.dark .theme-toggle__icon--sun {
+        opacity: 0;
+        transform: scale(0.65) rotate(-12deg);
+      }
+      :root.dark .theme-toggle__icon--moon {
+        opacity: 1;
+        transform: scale(1);
       }
       main {
-        max-width: 1100px;
-        margin: 32px auto 80px;
-        padding: 0 24px 24px;
+        padding: 32px;
         display: grid;
         gap: 28px;
       }
-      h1 {
-        margin: 0;
-        font-size: clamp(26px, 3vw, 32px);
-        letter-spacing: -0.02em;
-      }
-      .lead { color: var(--muted); font-size: 14px; }
-      .grid {
-        display: grid;
-        gap: 24px;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      }
-      .card {
-        background: var(--surface);
-        border-radius: 24px;
+      .panel {
+        border-radius: var(--radius-lg);
         border: 1px solid var(--border);
+        background: var(--surface);
         box-shadow: var(--shadow);
-        padding: 28px;
+        padding: 24px;
         display: grid;
         gap: 20px;
       }
-      label {
+      .panel__header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .panel__header h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .panel__meta { color: var(--muted); font-size: 13px; }
+      .form-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        align-items: end;
+      }
+      .form-grid label {
         display: grid;
         gap: 8px;
         font-size: 13px;
         color: var(--muted);
       }
       input,
-      select {
+      select,
+      textarea {
+        font: inherit;
         border-radius: 14px;
         border: 1px solid var(--border);
-        background: var(--card);
-        padding: 12px 16px;
-        font: inherit;
+        background: var(--panel);
         color: var(--fg);
+        padding: 10px 14px;
       }
+      textarea { resize: vertical; }
       input:focus,
-      select:focus {
-        outline: 2px solid rgba(99, 102, 241, 0.35);
+      select:focus,
+      textarea:focus {
+        outline: 2px solid rgba(76, 110, 245, 0.35);
         outline-offset: 2px;
       }
-      .primary-btn {
-        border-radius: 14px;
-        border: none;
-        background: linear-gradient(135deg, #6366f1, #4338ca);
-        color: #fff;
-        padding: 12px 20px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 18px 35px rgba(99, 102, 241, 0.3);
+      .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        grid-column: 1 / -1;
       }
-      .list {
-        display: grid;
-        gap: 16px;
-      }
-      .user-card {
-        border-radius: 18px;
-        border: 1px solid var(--border);
-        background: var(--card);
-        padding: 18px;
-        display: grid;
+      .form-grid--compact {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 14px;
       }
-      .user-meta {
+      .form-grid--compact .form-actions { justify-content: flex-end; }
+      .user-list {
+        display: grid;
+        gap: 18px;
+      }
+      .user-item {
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        padding: 20px;
+        display: grid;
+        gap: 18px;
+      }
+      .user-item__header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .user-item__title {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+      }
+      .user-item__badge {
+        font-size: 12px;
+        color: var(--muted);
+        background: rgba(148, 163, 184, 0.18);
+        border-radius: 999px;
+        padding: 4px 10px;
+      }
+      .user-item__footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .user-item__meta {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
         font-size: 12px;
         color: var(--muted);
       }
-      .inline-actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-      .outline-btn {
-        padding: 10px 16px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-      }
-      .danger {
-        border-color: rgba(248, 113, 113, 0.35);
-        color: #dc2626;
-      }
-      :root.dark .danger { color: #fca5a5; }
-      .danger:hover { background: rgba(248, 113, 113, 0.12); }
-      form { display: grid; gap: 16px; }
-      .flash {
+      .alert-stack { display: grid; gap: 12px; }
+      .alert {
+        border-radius: var(--radius-md);
         padding: 14px 18px;
-        border-radius: 16px;
         font-size: 14px;
+        border: 1px solid var(--border);
+        background: rgba(148, 163, 184, 0.18);
       }
-      .flash.success {
-        background: rgba(34,197,94,0.15);
-        border: 1px solid rgba(34,197,94,0.35);
-        color: #15803d;
+      .alert--success {
+        border-color: rgba(16, 185, 129, 0.45);
+        background: rgba(16, 185, 129, 0.16);
+        color: #047857;
       }
-      .flash.error {
-        background: rgba(248,113,113,0.15);
-        border: 1px solid rgba(248,113,113,0.35);
+      .alert--error {
+        border-color: rgba(239, 68, 68, 0.45);
+        background: rgba(239, 68, 68, 0.16);
         color: #b91c1c;
       }
-      :root.dark .flash.success {
-        background: rgba(34,197,94,0.12);
-        border-color: rgba(34,197,94,0.25);
-        color: #4ade80;
+      :root.dark .alert--success {
+        color: #34d399;
       }
-      :root.dark .flash.error {
-        background: rgba(248,113,113,0.12);
-        border-color: rgba(248,113,113,0.25);
-        color: #fca5a5;
+      :root.dark .alert--error {
+        color: #f87171;
       }
-      @media (max-width: 768px) {
-        .topbar { flex-wrap: wrap; }
-        .topbar__right { width: 100%; justify-content: space-between; }
+      .empty-state {
+        padding: 36px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 14px;
+        border: 1px dashed var(--border);
+        border-radius: var(--radius-md);
+        background: rgba(148, 163, 184, 0.12);
+      }
+      @media (max-width: 960px) {
+        .app-shell { grid-template-columns: 1fr; }
+        .sidebar {
+          position: static;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+          box-shadow: none;
+          padding: 24px;
+        }
+        header.main-header { position: static; }
+        .header-inner { padding: 20px 24px; }
+        main { padding: 24px; }
+      }
+      @media (max-width: 640px) {
+        .header-actions { width: 100%; justify-content: flex-end; }
+        .form-actions { justify-content: stretch; }
+        .form-actions .btn { width: 100%; }
       }
     </style>
   </head>
   <body>
-    <header>
-      <div class="topbar">
-        <a href="{{ url_for('index') }}" class="brand" aria-label="返回库存控制中心">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m15 18-6-6 6-6" />
-            <path d="M8 6H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
           </svg>
-          返回控制中心
-        </a>
-        <nav>
-          <a class="nav-link" href="{{ url_for('index') }}">库存总览</a>
-          {% if permissions.can_view_history %}
-            <a class="nav-link" href="{{ url_for('recent_activity') }}">最近动态</a>
-          {% endif %}
-          {% if permissions.can_view_history %}
-            <a class="nav-link" href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
-          {% endif %}
-          <span class="nav-link active">用户管理</span>
-        </nav>
-        <div class="topbar__right">
-          <span>当前账号：<strong>{{ current_user.username }}</strong> · {{ role_labels.get(current_user.role, current_user.role) }}</span>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="ghost-btn">退出</button>
-          </form>
-          <button data-theme-toggle class="theme-toggle" aria-label="切换主题">
-            <svg class="theme-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z" />
-            </svg>
-          </button>
+          库存控制中心
         </div>
-      </div>
-    </header>
-    <main>
-      <div>
-        <h1>用户管理</h1>
-        <p class="lead">维护能够登录系统的账号，为不同角色配置权限。</p>
-      </div>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="card" style="padding:18px; gap:12px;">
-            {% for category, message in messages %}
-              <div class="flash {% if category == 'success' %}success{% else %}error{% endif %}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
-      <div class="grid">
-        <section class="card">
-          <div>
-            <h2 style="margin:0;font-size:20px;letter-spacing:-0.02em;">新增用户</h2>
-            <p class="lead" style="margin-top:6px;">创建新的登录账号并设置角色权限。</p>
-          </div>
-          <form method="post" action="{{ url_for('create_user_route') }}">
-            <label>
-              用户名
-              <input name="username" required minlength="3" placeholder="至少 3 个字符" />
-            </label>
-            <label>
-              密码
-              <input name="password" type="password" required placeholder="请输入初始密码" />
-            </label>
-            <label>
-              角色
-              <select name="role">
-                <option value="staff">普通员工</option>
-                <option value="admin">管理员</option>
-                <option value="super_admin">超级管理员</option>
-              </select>
-            </label>
-            <div style="display:flex; justify-content:flex-end;">
-              <button type="submit" class="primary-btn">创建账号</button>
-            </div>
+        <div class="sidebar__section">
+          <strong>账号维护</strong>
+          <p class="sidebar__hint">仅超级管理员可访问本页面，可创建或调整系统内的登录账号。</p>
+          <span class="chip">安全优先</span>
+        </div>
+        <nav class="sidebar__nav">
+          <a class="nav-btn" href="{{ url_for('index') }}">库存总览</a>
+          {% if permissions.can_view_history %}
+            <a class="nav-btn" href="{{ url_for('recent_activity') }}">最近动态</a>
+            <a class="nav-btn" href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
+          {% endif %}
+          <span class="nav-btn active">用户管理</span>
+        </nav>
+        <div class="sidebar__footer">
+          <div>当前账号：<strong>{{ current_user.username }}</strong></div>
+          <div>角色：{{ role_labels.get(current_user.role, current_user.role) }}</div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="btn btn--ghost" style="padding:8px 14px;">退出登录</button>
           </form>
-        </section>
-        <section class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h2 style="margin:0;font-size:20px;letter-spacing:-0.02em;">现有用户</h2>
-            <span class="lead">共 {{ users|length }} 个</span>
+        </div>
+      </aside>
+      <div class="main">
+        <header class="main-header">
+          <div class="header-inner">
+            <div class="page-heading">
+              <h1 class="page-title">用户管理</h1>
+              <p class="header-meta">共 {{ users|length }} 个系统账号 · 仅超级管理员可见</p>
+            </div>
+            <div class="header-actions">
+              <button id="themeToggle" class="btn theme-toggle" type="button" aria-label="切换深浅色" aria-pressed="false">
+                <svg class="theme-toggle__icon theme-toggle__icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M17.99 17.99l1.79 1.79M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M17.99 6.01l1.79-1.79" />
+                </svg>
+                <svg class="theme-toggle__icon theme-toggle__icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 14.25A7.25 7.25 0 0110.75 4a6.25 6.25 0 000 12.5A7.25 7.25 0 0121 14.25z" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div class="list">
-            {% for user in users %}
-              <article class="user-card">
-                <form method="post" action="{{ url_for('update_user_route', username=user.username) }}">
-                  <label>
-                    用户名
-                    <input name="username" value="{{ user.username }}" required minlength="3" />
-                  </label>
-                  <label>
-                    新密码 <span style="font-size:12px; color:var(--muted);">（留空表示不修改）</span>
-                    <input name="password" type="password" />
-                  </label>
-                  <label>
-                    角色
-                    <select name="role">
-                      <option value="staff" {% if user.role == 'staff' %}selected{% endif %}>普通员工</option>
-                      <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>管理员</option>
-                      <option value="super_admin" {% if user.role == 'super_admin' %}selected{% endif %}>超级管理员</option>
-                    </select>
-                  </label>
-                  <div class="inline-actions">
-                    <button type="submit" class="outline-btn">保存修改</button>
-                  </div>
-                </form>
-                <form method="post" action="{{ url_for('delete_user_route', username=user.username) }}" class="inline-actions">
-                  <button type="submit" class="outline-btn danger" {% if current_user.username == user.username %}disabled{% endif %}>删除账号</button>
-                  {% if current_user.username == user.username %}
-                    <span style="font-size:12px; color:var(--muted);">不能删除当前登录账号</span>
-                  {% endif %}
-                </form>
-                <div class="user-meta">
-                  <span>创建时间：{{ user.created_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
-                  <span>最近更新：{{ user.updated_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
+        </header>
+        <main>
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              <section class="panel" aria-live="polite">
+                <div class="panel__header">
+                  <h2>系统提示</h2>
+                  <p class="panel__meta">账户相关操作的即时反馈</p>
                 </div>
-              </article>
-            {% endfor %}
-          </div>
-        </section>
+                <div class="alert-stack">
+                  {% for category, message in messages %}
+                    <div class="alert {% if category == 'success' %}alert--success{% else %}alert--error{% endif %}">{{ message }}</div>
+                  {% endfor %}
+                </div>
+              </section>
+            {% endif %}
+          {% endwith %}
+          <section class="panel">
+            <div class="panel__header">
+              <div>
+                <h2>新增用户</h2>
+                <p class="panel__meta">创建新的登录账号并赋予合适的角色权限</p>
+              </div>
+            </div>
+            <form method="post" action="{{ url_for('create_user_route') }}" class="form-grid">
+              <label>
+                用户名
+                <input name="username" required minlength="3" placeholder="至少 3 个字符" />
+              </label>
+              <label>
+                密码
+                <input name="password" type="password" required placeholder="请输入初始密码" />
+              </label>
+              <label>
+                角色
+                <select name="role">
+                  <option value="staff">普通员工</option>
+                  <option value="admin">管理员</option>
+                  <option value="super_admin">超级管理员</option>
+                </select>
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="btn btn--primary">创建账号</button>
+              </div>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="panel__header">
+              <div>
+                <h2>现有用户</h2>
+                <p class="panel__meta">共 {{ users|length }} 个账号，可快速编辑或重置密码</p>
+              </div>
+            </div>
+            {% if users %}
+              <div class="user-list">
+                {% for user in users %}
+                  <article class="user-item">
+                    <div class="user-item__header">
+                      <h3 class="user-item__title">{{ user.username }}</h3>
+                      <span class="user-item__badge">{{ role_labels.get(user.role, user.role) }}</span>
+                    </div>
+                    <form method="post" action="{{ url_for('update_user_route', username=user.username) }}" class="form-grid form-grid--compact">
+                      <label>
+                        用户名
+                        <input name="username" value="{{ user.username }}" required minlength="3" />
+                      </label>
+                      <label>
+                        新密码 <span style="font-size:12px; color:var(--muted);">（留空表示不修改）</span>
+                        <input name="password" type="password" />
+                      </label>
+                      <label>
+                        角色
+                        <select name="role">
+                          <option value="staff" {% if user.role == 'staff' %}selected{% endif %}>普通员工</option>
+                          <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>管理员</option>
+                          <option value="super_admin" {% if user.role == 'super_admin' %}selected{% endif %}>超级管理员</option>
+                        </select>
+                      </label>
+                      <div class="form-actions">
+                        <button type="submit" class="btn btn--outline">保存修改</button>
+                      </div>
+                    </form>
+                    <div class="user-item__footer">
+                      <form method="post" action="{{ url_for('delete_user_route', username=user.username) }}">
+                        <button type="submit" class="btn btn--danger" {% if current_user.username == user.username %}disabled{% endif %}>删除账号</button>
+                      </form>
+                      <div class="user-item__meta">
+                        <span>创建时间：{{ user.created_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
+                        <span>最近更新：{{ user.updated_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
+                      </div>
+                    </div>
+                    {% if current_user.username == user.username %}
+                      <div class="alert alert--error" role="note">当前登录账号不可删除，如需停用请联系其他超级管理员。</div>
+                    {% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state">目前尚无用户，请先创建一个账号。</div>
+            {% endif %}
+          </section>
+        </main>
       </div>
-    </main>
+    </div>
     <script>
       const root = document.documentElement;
-      const stored = localStorage.getItem('theme');
-      if (stored) {
-        root.classList.toggle('dark', stored === 'dark');
-      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark');
-      }
-      document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const next = root.classList.contains('dark') ? 'light' : 'dark';
-          root.classList.toggle('dark', next === 'dark');
-          localStorage.setItem('theme', next);
-        });
+      const themeToggleBtn = document.getElementById('themeToggle');
+      const getTheme = () => localStorage.getItem('theme');
+      const setTheme = (t) => localStorage.setItem('theme', t);
+      const syncThemeToggle = (theme) => {
+        if (!themeToggleBtn) return;
+        themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        themeToggleBtn.dataset.theme = theme;
+      };
+      const applyTheme = (theme) => {
+        root.classList.toggle('dark', theme === 'dark');
+        syncThemeToggle(theme);
+      };
+      const initTheme = () => {
+        const storedTheme = getTheme();
+        if (storedTheme) {
+          applyTheme(storedTheme);
+        } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          applyTheme('dark');
+        }
+      };
+      initTheme();
+      syncThemeToggle(root.classList.contains('dark') ? 'dark' : 'light');
+      themeToggleBtn?.addEventListener('click', () => {
+        const nextTheme = root.classList.contains('dark') ? 'light' : 'dark';
+        applyTheme(nextTheme);
+        setTheme(nextTheme);
       });
     </script>
   </body>
