@@ -1,790 +1,1271 @@
 <!doctype html>
-<html lang="zh" data-theme="light">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>库存控制中心</title>
-
-    <!-- Tailwind (CDN build) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: ['class'],
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
-            },
-            colors: {
-              brand: {
-                50: '#F4F6FF',
-                100: '#E9EDFF',
-                200: '#C7D0FF',
-                300: '#A4B4FF',
-                400: '#8097FF',
-                500: '#5D7BFF',
-                600: '#3A5EFF',
-                700: '#2447E6',
-                800: '#1B34B0',
-                900: '#14257F'
-              }
-            },
-            boxShadow: {
-              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)',
-              innerlg: 'inset 0 1px 0 rgba(255,255,255,.06), inset 0 -1px 0 rgba(0,0,0,.15)'
-            },
-            backdropBlur: { 12: '12px' },
-            keyframes: {
-              in: { '0%':{opacity:0,transform:'translateY(8px)'}, '100%':{opacity:1,transform:'translateY(0)'} },
-              pingy: { '0%,100%':{transform:'translateY(0)'}, '50%':{transform:'translateY(-2px)'} }
-            },
-            animation: {
-              in: 'in .45s cubic-bezier(.22,.61,.36,1) both',
-              pingy: 'pingy 2s ease-in-out infinite'
-            }
-          }
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #eef1f9;
+        --fg: #111827;
+        --muted: #6b7280;
+        --surface: rgba(255, 255, 255, 0.94);
+        --panel: rgba(255,255,255,0.82);
+        --border: rgba(148, 163, 184, 0.35);
+        --border-strong: rgba(100, 116, 139, 0.45);
+        --accent: #4c6ef5;
+        --accent-soft: rgba(76, 110, 245, 0.12);
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --success: #10b981;
+        --shadow: 0 28px 60px rgba(15, 23, 42, 0.15);
+        --radius-lg: 24px;
+        --radius-md: 16px;
+      }
+      :root.dark {
+        --bg: #050a18;
+        --fg: #f8fafc;
+        --muted: #94a3b8;
+        --surface: rgba(12, 18, 36, 0.9);
+        --panel: rgba(12, 18, 36, 0.78);
+        --border: rgba(100, 116, 139, 0.22);
+        --border-strong: rgba(100, 116, 139, 0.35);
+        --shadow: 0 28px 60px rgba(2, 6, 23, 0.6);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top left, rgba(76, 110, 245, 0.15), transparent 55%),
+                    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.08), transparent 60%),
+                    var(--bg);
+        color: var(--fg);
+      }
+      a { color: inherit; text-decoration: none; }
+      .hidden { display: none !important; }
+      .flex { display: flex !important; }
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 0;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        padding: 32px 28px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
+      }
+      .sidebar__brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-size: 20px;
+      }
+      .sidebar__brand svg { width: 22px; height: 22px; }
+      .sidebar__section {
+        display: grid;
+        gap: 18px;
+      }
+      .sidebar label {
+        display: grid;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      select,
+      input,
+      textarea {
+        font: inherit;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        padding: 10px 14px;
+      }
+      textarea { resize: vertical; }
+      select:focus,
+      input:focus,
+      textarea:focus {
+        outline: 2px solid rgba(76, 110, 245, 0.35);
+        outline-offset: 2px;
+      }
+      .sidebar__nav {
+        display: grid;
+        gap: 8px;
+      }
+      .nav-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        background: transparent;
+        font-size: 14px;
+        color: var(--muted);
+        transition: background 0.2s ease, border 0.2s ease, color 0.2s ease;
+      }
+      .nav-btn.active {
+        background: var(--accent-soft);
+        border-color: var(--border);
+        color: var(--fg);
+      }
+      .sidebar__footer {
+        margin-top: auto;
+        display: grid;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .sidebar__footer form { margin: 0; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: 14px;
+        padding: 10px 16px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+      }
+      .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+      .btn--primary {
+        background: linear-gradient(135deg, #4c6ef5, #5b8ef9);
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(76, 110, 245, 0.25);
+      }
+      .btn--ghost {
+        border-color: var(--border);
+        background: transparent;
+        color: var(--fg);
+      }
+      .btn--outline {
+        border-color: var(--border);
+        background: var(--panel);
+      }
+      .btn--danger {
+        border-color: rgba(239, 68, 68, 0.35);
+        color: #dc2626;
+      }
+      :root.dark .btn--danger { color: #fca5a5; }
+      header.main-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(18px);
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .header-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 32px;
+      }
+      .search-group {
+        display: flex;
+        flex: 1 1 280px;
+        gap: 12px;
+        align-items: center;
+      }
+      .search-group input {
+        flex: 1 1 auto;
+      }
+      .filter-group {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .dropdown {
+        position: relative;
+      }
+      .menu {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        min-width: 200px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        z-index: 40;
+      }
+      .menu button,
+      .menu a {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: none;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+      }
+      .menu button:hover,
+      .menu a:hover {
+        background: rgba(148, 163, 184, 0.15);
+      }
+      .theme-toggle {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-color: var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        overflow: hidden;
+      }
+      .theme-toggle:focus-visible {
+        outline: 2px solid rgba(76, 110, 245, 0.45);
+        outline-offset: 3px;
+      }
+      .theme-toggle__icon {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 20px;
+        height: 20px;
+        opacity: 0;
+        transform: scale(0.75) rotate(8deg);
+        transition: opacity 0.28s ease, transform 0.28s ease;
+      }
+      .theme-toggle__icon--sun {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .theme-toggle__icon--moon {
+        transform: scale(0.8) rotate(-10deg);
+      }
+      :root.dark .theme-toggle {
+        background: rgba(76, 110, 245, 0.16);
+        border-color: rgba(99, 102, 241, 0.4);
+        color: #f8fafc;
+      }
+      :root.dark .theme-toggle__icon--sun {
+        opacity: 0;
+        transform: scale(0.65) rotate(-12deg);
+      }
+      :root.dark .theme-toggle__icon--moon {
+        opacity: 1;
+        transform: scale(1);
+      }
+      main {
+        padding: 32px;
+        display: grid;
+        gap: 28px;
+      }
+      .summary-grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .summary-card {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        padding: 24px;
+        box-shadow: var(--shadow);
+        display: grid;
+        gap: 10px;
+      }
+      .summary-card small { color: var(--muted); }
+      .summary-card strong { font-size: 28px; letter-spacing: -0.02em; }
+      .content-grid {
+        display: grid;
+        gap: 24px;
+      }
+      @media (min-width: 1200px) {
+        .content-grid.two-column {
+          grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
         }
       }
-    </script>
-
-    <style>
-      :root { color-scheme: light dark; }
-      html, body { height: 100%; }
-      .glass { backdrop-filter: blur(12px) saturate(1.15); -webkit-backdrop-filter: blur(12px) saturate(1.15); background: color-mix(in oklab, var(--tw-bg-opacity,1) 0%, transparent 0%); }
-      .surface {
-        background: radial-gradient(120% 120% at 0% 0%, rgba(93,123,255,.15) 0%, transparent 50%),
-                    radial-gradient(120% 120% at 100% 0%, rgba(36,71,230,.14) 0%, transparent 52%),
-                    linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.35));
+      .panel {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 24px;
+        display: grid;
+        gap: 20px;
       }
-      .surface-dark {
-        background: radial-gradient(120% 120% at 0% 0%, rgba(93,123,255,.14) 0%, transparent 50%),
-                    radial-gradient(120% 120% at 100% 0%, rgba(36,71,230,.12) 0%, transparent 52%),
-                    linear-gradient(180deg, rgba(20,24,40,.65), rgba(20,24,40,.45));
+      .panel--flush { padding: 0; }
+      .panel__header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
       }
-      .switcher::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 18px; width: 18px; border-radius: 9999px; background: white; border: 3px solid #5D7BFF; box-shadow: 0 6px 18px rgba(93,123,255,.45); }
-      .switcher { accent-color: #5D7BFF; }
-      .desktop-nav { display: none !important; }
-      .mobile-nav { display: block; }
-      @media (min-width: 768px) {
-        .desktop-nav { display: flex !important; }
-        .mobile-nav { display: none !important; }
+      .panel__header h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .panel__meta { color: var(--muted); font-size: 13px; }
+      .inventory-list {
+        display: grid;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .inventory-item {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        display: grid;
+        gap: 18px;
+        background: var(--panel);
+      }
+      .inventory-item:last-child { border-bottom: none; }
+      .inventory-item.low {
+        border-left: 4px solid rgba(239, 68, 68, 0.6);
+        background: rgba(239, 68, 68, 0.08);
+      }
+      :root.dark .inventory-item.low {
+        background: rgba(239, 68, 68, 0.15);
+      }
+      .item-top {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .item-name {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        color: #dc2626;
+        background: rgba(239, 68, 68, 0.12);
+      }
+      :root.dark .badge { color: #fca5a5; }
+      .quantity-chip {
+        border-radius: 999px;
+        border: 1px solid rgba(76, 110, 245, 0.35);
+        padding: 6px 12px;
+        font-size: 14px;
+        background: rgba(76, 110, 245, 0.12);
+        color: var(--fg);
+      }
+      .item-details {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .inventory-form {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+      .inventory-form label {
+        display: grid;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .inventory-form .actions {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+      .pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .pagination form { display: flex; align-items: center; gap: 6px; }
+      .pagination select { padding: 8px 12px; }
+      .timeline-controls {
+        display: grid;
+        gap: 16px;
+      }
+      .timeline-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .timeline-actions form {
+        margin: 0;
+      }
+      .timeline-filters {
+        display: grid;
+        gap: 12px;
+      }
+      .timeline-filters form {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+      }
+      .timeline-filters label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        width: 100%;
+      }
+      .timeline-filters select {
+        flex: 1 1 160px;
+        min-width: 0;
+        padding: 8px 12px;
+      }
+      .timeline-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .timeline-pagination__buttons {
+        display: flex;
+        gap: 8px;
+      }
+      .timeline-list {
+        display: grid;
+        gap: 16px;
+      }
+      .timeline-item {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .timeline-item__marker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .timeline-item__content {
+        display: grid;
+        gap: 8px;
+      }
+      .timeline-item__title {
+        font-weight: 600;
+      }
+      .timeline-item__meta {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .timeline-item__details {
+        font-size: 13px;
+        color: inherit;
+      }
+      .timeline-item__list {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .timeline-badge {
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 10px;
+      }
+      .timeline-item__time {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .timeline-badge.success { background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16,185,129,0.28); }
+      .timeline-badge.danger { background: rgba(239, 68, 68, 0.12); color: #b91c1c; border: 1px solid rgba(239,68,68,0.28); }
+      .timeline-badge.neutral { background: rgba(148, 163, 184, 0.12); color: var(--muted); border: 1px solid rgba(148,163,184,0.3); }
+      :root.dark .timeline-badge.success { color: #34d399; }
+      :root.dark .timeline-badge.danger { color: #fca5a5; }
+      @media (min-width: 720px) {
+        .timeline-controls {
+          gap: 20px;
+        }
+        .timeline-filters {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 16px;
+        }
+        .timeline-filters form {
+          flex: 0 1 220px;
+        }
+      }
+      @media (min-width: 640px) {
+        .timeline-item {
+          grid-template-columns: auto 1fr;
+          align-items: flex-start;
+        }
+        .timeline-item__marker {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+      .alert-stack {
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        background: rgba(239, 68, 68, 0.12);
+        padding: 20px;
+        display: grid;
+        gap: 12px;
+      }
+      :root.dark .alert-stack {
+        background: rgba(239, 68, 68, 0.18);
+      }
+      .alert-stack h3 { margin: 0; font-size: 18px; }
+      .alert-stack ul { margin: 0; padding-left: 18px; color: #b91c1c; }
+      :root.dark .alert-stack ul { color: #fca5a5; }
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .modal.flex { display: flex; }
+      .modal::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(12px);
+      }
+      .modal__dialog {
+        position: relative;
+        z-index: 1;
+        width: min(720px, 100%);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 28px;
+        display: grid;
+        gap: 20px;
+      }
+      .modal__close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 18px;
+        cursor: pointer;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        text-align: left;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      thead { background: rgba(148, 163, 184, 0.18); }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 70;
+      }
+      .toast__body {
+        border-radius: 14px;
+        background: rgba(16, 185, 129, 0.95);
+        color: #fff;
+        padding: 14px 18px;
+        box-shadow: var(--shadow);
+        font-size: 14px;
+      }
+      .mobile-only {
+        display: none;
+        width: 100%;
+        gap: 12px;
+      }
+      @media (max-width: 960px) {
+        .app-shell { grid-template-columns: 1fr; }
+        .sidebar {
+          position: static;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+          box-shadow: none;
+          padding: 24px;
+        }
+        header.main-header { position: static; }
+        .header-inner { padding: 20px 24px; }
+        main { padding: 24px; }
+        .mobile-only { display: grid; }
+      }
+      @media (max-width: 640px) {
+        .search-group { flex-direction: column; align-items: stretch; }
+        .header-actions { width: 100%; justify-content: flex-end; gap: 10px; }
+        .filter-group { width: 100%; }
       }
     </style>
   </head>
-
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-brand-200/60 selection:text-slate-900">
-    <!-- Top Bar -->
-    <header class="sticky top-0 z-40 supports-[backdrop-filter]:backdrop-blur-12 border-b border-slate-200/60 dark:border-white/5 bg-white/80 dark:bg-slate-900/70">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
-        <a href="#" class="flex items-center gap-2 font-semibold tracking-tight group min-w-0" aria-label="返回首页">
-          <svg class="w-5 h-5 text-brand-600 group-hover:animate-pingy shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-          <span class="truncate">库存控制中心</span>
-        </a>
-        <div class="desktop-nav flex-1 items-center gap-4 min-w-0">
-          <div class="flex items-center gap-2 shrink-0">
-            <form method="post" action="{{ url_for('select_store') }}" class="h-10">
-              <select name="store_id" class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 text-sm" onchange="this.form.submit()">
-                {% for store_id, store in stores.items() %}
-                  <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}{% if store.items_count %}（{{ store.items_count }}）{% endif %}</option>
-                {% endfor %}
-              </select>
-            </form>
-            {% if permissions.can_manage_stores %}
-              <button class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm" data-open-modal="#storeModal">门店管理</button>
-            {% endif %}
-          </div>
-          <div class="flex items-center gap-2 flex-1 min-w-[180px] max-w-md">
-            <div class="relative flex-1">
-              <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
-              <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            </div>
-            <button type="button" data-search-button data-input-selector="#keyword" class="h-10 px-4 rounded-xl bg-brand-600 text-white text-sm font-medium hover:brightness-105 transition">搜索</button>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <select id="categoryFilter" data-category-filter class="h-10 rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 text-sm">
-              <option value="">全部分类</option>
-              {% for category_id, category in categories.items() %}
-                <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
-              {% endfor %}
-            </select>
-            {% if permissions.can_manage_categories %}
-              <button class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm" data-open-modal="#categoryModal">分类管理</button>
-            {% endif %}
-          </div>
-          <div class="flex items-center gap-2 ml-auto shrink-0">
-            {% if permissions.can_manage_items %}
-              <div class="relative">
-                <button id="actionsMenuBtn" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm inline-flex items-center gap-1" aria-haspopup="menu" aria-expanded="false">
-                  快捷操作
-                  <svg class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <div id="actionsMenu" class="hidden absolute right-0 mt-2 w-48 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft p-1 text-sm z-50" role="menu" aria-labelledby="actionsMenuBtn">
-                  <button type="button" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" data-open-modal="#addModal" role="menuitem">新增 SKU</button>
-                  <button type="button" id="importTrigger" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">从表格导入</button>
-                  <a href="/api/items/export" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">导出库存表格</a>
-                  <a href="/api/items/template" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">下载导入模板</a>
-                </div>
-              </div>
-            {% endif %}
-            <div class="relative">
-              <button id="userMenuBtn" class="h-10 px-3 rounded-xl border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 text-sm inline-flex items-center gap-2" aria-haspopup="menu" aria-expanded="false">
-                <span class="truncate max-w-[7rem]">{{ current_user.username }}</span>
-                <svg class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xlsoft text-sm z-50" role="menu" aria-labelledby="userMenuBtn">
-                <div class="px-3 py-2 text-xs text-slate-500 dark:text-slate-300 border-b border-slate-200/60 dark:border-white/10">
-                  {{ current_user.username }}
-                  <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
-                </div>
-                <div class="p-1 space-y-1">
-                  {% if permissions.can_view_history %}
-                    <a href="{{ url_for('analytics_dashboard') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">出入库统计</a>
-                  {% endif %}
-                  {% if permissions.can_manage_users %}
-                    <a href="{{ url_for('manage_users') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">用户管理</a>
-                  {% endif %}
-                  <form method="post" action="{{ url_for('logout') }}">
-                    <button type="submit" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100/70 dark:hover:bg-white/5" role="menuitem">退出登录</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button id="themeToggle" class="ml-2 h-10 w-10 grid place-items-center rounded-full border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" aria-label="切换主题">
-          <svg class="theme-icon w-4 h-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z"/>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
           </svg>
-        </button>
-      </div>
-      <div class="mobile-nav border-t border-slate-200/60 dark:border-white/10">
-        <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-2 text-sm">
-          <form method="post" action="{{ url_for('select_store') }}" class="w-full flex items-center gap-2">
-            <select name="store_id" class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" onchange="this.form.submit()">
-              {% for store_id, store in stores.items() %}
-                <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
-              {% endfor %}
-            </select>
-            {% if permissions.can_manage_stores %}
-              <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#storeModal">管理</button>
-            {% endif %}
-          </form>
-          <div class="w-full flex items-center gap-2">
-            <div class="relative flex-1">
-              <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
-              <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            </div>
-            <button type="button" data-search-button data-input-selector="#keywordMobile" class="h-10 px-4 rounded-lg bg-brand-600 text-white font-medium">搜索</button>
-          </div>
-          <div class="w-full flex items-center gap-2">
-            <select data-category-filter class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
-              <option value="">全部分类</option>
-              {% for category_id, category in categories.items() %}
-                <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
-              {% endfor %}
-            </select>
-            {% if permissions.can_manage_categories %}
-              <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#categoryModal">分类管理</button>
-            {% endif %}
-          </div>
-          <div class="text-slate-600 dark:text-slate-300">
-            {{ current_user.username }}
-            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
-          </div>
-          {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
-          {% endif %}
-          {% if permissions.can_view_history %}
-            <a href="{{ url_for('analytics_dashboard') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">出入库统计</a>
-          {% endif %}
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
-          </form>
+          库存控制中心
         </div>
-      </div>
-    </header>
-
-    <!-- Hero KPIs -->
-    <section class="relative">
-      <div class="absolute inset-0 -z-10 opacity-90 dark:opacity-70">
-        <div class="h-64 surface dark:hidden"></div>
-        <div class="h-64 hidden dark:block surface-dark"></div>
-      </div>
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-in">
-          <div class="col-span-1 lg:col-span-3 p-6 rounded-2xl shadow-xlsoft border border-white/40 dark:border-white/10 bg-white/60 dark:bg-slate-900/50 glass">
-            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-              <div>
-                <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/30 dark:border-white/5 text-slate-700 dark:text-slate-200">控制面板 <span class="opacity-60">实时把握库存动态</span></span>
-                <h1 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">库存控制中心</h1>
-              </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">SKU 数量</div>
-                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_items }}</div>
-                </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">库存总数</div>
-                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_quantity }}</div>
-                </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">库存预警数量</div>
-                  <div class="mt-1 text-2xl font-semibold {% if summary.low_stock_count %}text-red-600 dark:text-red-300{% endif %}">{{ summary.low_stock_count }}</div>
-                </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">出入库</div>
-                  <div class="mt-1 text-sm">入 {{ summary.latest_in|format_datetime('%Y-%m-%d %H:%M') }}<br>出 {{ summary.latest_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 {% if permissions.can_view_history %}xl:grid-cols-3{% else %}xl:grid-cols-1{% endif %} gap-6">
-      <!-- List -->
-      <section class="xl:col-span-2 space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-base font-semibold tracking-tight">库存详情 <span class="text-slate-500 font-normal">共 {{ inventory_pagination.total }} 项</span></h2>
-          <div class="md:hidden inline-flex rounded-xl overflow-hidden border border-slate-200/60 dark:border-white/10">
-            {% if permissions.can_manage_items %}
-              <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
-              <a class="px-3 py-2 text-sm" href="/api/items/template">模板</a>
-              <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
-              <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2 justify-between text-xs text-slate-500">
-          <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
-            {% for key, values in preserved_query.items() %}
-              {% if key not in ['inventory_per_page', 'inventory_page'] %}
-                {% for value in values %}
-                  <input type="hidden" name="{{ key }}" value="{{ value }}" />
-                {% endfor %}
-              {% endif %}
-            {% endfor %}
-            <input type="hidden" name="inventory_page" value="1" />
-            <label class="flex items-center gap-1">
-              <span>每页</span>
-              <select name="inventory_per_page" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
-                {% for option in [5, 10, 20, 50, 100] %}
-                  <option value="{{ option }}" {% if inventory_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+        <div class="sidebar__section">
+          <form method="post" action="{{ url_for('select_store') }}">
+            <label>
+              当前门店
+              <select name="store_id" onchange="this.form.submit()">
+                {% for store_id, store in stores.items() %}
+                  <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>
+                    {{ store.name }}{% if store.items_count %}（{{ store.items_count }}）{% endif %}
+                  </option>
                 {% endfor %}
               </select>
             </label>
           </form>
-          <div class="flex items-center gap-1">
-            <span>第 {{ inventory_pagination.start_index or 0 }}-{{ inventory_pagination.end_index or 0 }} / {{ inventory_pagination.total }} 项</span>
-            <a href="{{ inventory_pagination.has_prev and build_query(inventory_page=inventory_pagination.prev_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not inventory_pagination.has_prev %}pointer-events-none opacity-40{% endif %}">上一页</a>
-            <a href="{{ inventory_pagination.has_next and build_query(inventory_page=inventory_pagination.next_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not inventory_pagination.has_next %}pointer-events-none opacity-40{% endif %}">下一页</a>
-          </div>
+          {% if permissions.can_manage_stores %}
+            <button class="btn btn--outline" data-open-modal="#storeModal">管理门店</button>
+          {% endif %}
         </div>
-
-        {% if import_summary %}
-          <div class="rounded-xl px-4 py-3 border text-sm shadow-innerlg
-                      {% if import_summary.error %} border-red-300/50 bg-red-50 text-red-700 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-200
-                      {% else %} border-emerald-300/50 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-200{% endif %}">
-            {% if import_summary.error %}
-              导入失败，请确认文件为 UTF-8 编码的 CSV，并包含 <code>name</code>、<code>quantity</code> 字段。
-            {% else %}
-              已导入 <strong>{{ import_summary.imported or 0 }}</strong> 条记录{% if import_summary.skipped %}，忽略 <strong>{{ import_summary.skipped }}</strong> 条无效行{% endif %}。
-            {% endif %}
-          </div>
-        {% endif %}
-
-        {% if items %}
-          <div id="inventoryList" class="divide-y divide-slate-200/70 dark:divide-white/5 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5">
-{% for item in items %}
-              {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
-              {% set category_info = categories.get(item.category) %}
-              <div class="px-5 py-5 transition hover:bg-slate-50/80 dark:hover:bg-white/5 {% if is_low %}bg-red-50/80 dark:bg-red-500/10 border-l-4 border-red-400/60 ring-1 ring-inset ring-red-400/40 dark:ring-red-400/30{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
-                <form class="grid grid-cols-1 gap-4 items-start lg:grid-cols-12 lg:items-end" method="post" action="/submit">
-                  <div class="lg:col-span-4">
-                    <div class="flex items-start md:items-center justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                          <div class="font-medium overflow-hidden text-ellipsis whitespace-nowrap md:whitespace-normal md:text-clip md:overflow-visible" title="{{ item.name }}">{{ item.name }}</div>
-                          {% if is_low %}
-                            <span class="inline-flex items-center gap-1 text-[11px] leading-4 font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-200 border border-red-500/30">
-                              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="m10.29 3.86-8 13.86A1.93 1.93 0 0 0 4 20h16a1.93 1.93 0 0 0 1.71-2.28l-8-13.86a2 2 0 0 0-3.42 0Z"/></svg>
-                              库存预警
-                            </span>
-                          {% endif %}
-                        </div>
-                        <div class="text-xs text-slate-500 mt-1">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                        <div class="text-xs text-slate-500">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                        {% if item.threshold is not none %}
-                          <div class="text-xs mt-1 {% if is_low %}text-red-600 dark:text-red-300{% else %}text-slate-500{% endif %}">
-                            阈值提醒：≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}{% if is_low %}（当前已触发预警）{% endif %}
-                          </div>
-                        {% else %}
-                          <div class="text-xs text-slate-400 mt-1">未设置阈值提醒</div>
-                        {% endif %}
-                        <div class="text-xs text-slate-500 mt-1">分类：{{ category_info.name if category_info else '未分类' }}</div>
-                      </div>
-                      <span class="shrink-0 inline-flex items-center h-7 px-2 rounded-full bg-brand-600/10 text-brand-700 dark:text-brand-300 border border-brand-600/20">
-                        {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}
-                      </span>
-                    </div>
+        <nav class="sidebar__nav">
+          <a class="nav-btn active" href="{{ url_for('index') }}">库存总览</a>
+          {% if permissions.can_view_history %}
+            <a class="nav-btn" href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
+          {% endif %}
+          {% if permissions.can_manage_users %}
+            <a class="nav-btn" href="{{ url_for('manage_users') }}">用户管理</a>
+          {% endif %}
+        </nav>
+        <div class="sidebar__footer">
+          <div>当前账号：<strong>{{ current_user.username }}</strong></div>
+          <div>角色：{{ role_labels.get(current_user.role, current_user.role) }}</div>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit" class="btn btn--ghost" style="padding:8px 14px;">退出登录</button>
+          </form>
+        </div>
+      </aside>
+      <div class="main">
+        <header class="main-header">
+          <div class="header-inner">
+            <div class="search-group">
+              <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" />
+              <button type="button" data-search-button data-input-selector="#keyword" class="btn btn--primary">搜索</button>
+            </div>
+            <div class="filter-group">
+              <select id="categoryFilter" data-category-filter>
+                <option value="">全部分类</option>
+                {% for category_id, category in categories.items() %}
+                  <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
+                {% endfor %}
+              </select>
+              {% if permissions.can_manage_categories %}
+                <button class="btn btn--outline" data-open-modal="#categoryModal">分类管理</button>
+              {% endif %}
+            </div>
+            <div class="header-actions">
+              {% if permissions.can_manage_items %}
+                <div class="dropdown">
+                  <button id="actionsMenuBtn" class="btn btn--outline" aria-haspopup="menu" aria-expanded="false">库存操作</button>
+                  <div id="actionsMenu" class="menu hidden">
+                    <button type="button" data-open-modal="#addModal">新增 SKU</button>
+                    <button type="button" id="importTrigger">从表格导入</button>
+                    <a href="/api/items/export">导出库存表格</a>
+                    <a href="/api/items/template">下载导入模板</a>
                   </div>
-                  {% if permissions.can_manage_items %}
-                    <div class="lg:col-span-2">
-                      <label class="block text-xs text-slate-500 mb-1">设置数量</label>
-                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}（输入新数量）" />
-                    </div>
+                </div>
+              {% endif %}
+              <div class="dropdown">
+                <button id="userMenuBtn" class="btn btn--outline" aria-haspopup="menu" aria-expanded="false">{{ current_user.username }}</button>
+                <div id="userMenu" class="menu hidden">
+                  <div class="panel__meta" style="padding:10px 12px;">{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</div>
+                  {% if permissions.can_view_history %}
+                    <a href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
                   {% endif %}
-                  <div class="lg:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">单位</label>
-                    {% if permissions.can_manage_items %}
-                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
-                    {% else %}
-                      <div class="w-full rounded-lg border border-dashed border-slate-200/60 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-2 text-sm text-slate-500">{{ item.unit or '—' }}</div>
-                      <input type="hidden" name="unit" value="{{ item.unit }}" />
-                    {% endif %}
-                  </div>
-                  <div class="lg:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">库存分类</label>
-                    {% if permissions.can_manage_categories %}
-                      <select class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" name="category">
-                        {% for category_id, category in categories.items() %}
-                          <option value="{{ category_id }}" {% if category_id == item.category %}selected{% endif %}>{{ category.name }}</option>
-                        {% endfor %}
-                      </select>
-                    {% else %}
-                      <div class="w-full rounded-lg border border-dashed border-slate-200/60 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-2 text-sm text-slate-500">{{ category_info.name if category_info else '未分类' }}</div>
-                      <input type="hidden" name="category" value="{{ item.category }}">
-                    {% endif %}
-                  </div>
-                  <div class="lg:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">阈值提醒{% if permissions.can_manage_threshold %}（可选）{% else %}（仅管理员可改）{% endif %}</label>
-                    {% if permissions.can_manage_threshold %}
-                      <input class="w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
-                    {% else %}
-                      <div class="w-full rounded-lg border border-dashed border-slate-200/60 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-2 text-sm text-slate-500">
-                        {% if item.threshold is not none %}
-                          ≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}
-                        {% else %}
-                          未设置阈值
-                        {% endif %}
-                      </div>
-                      <input type="hidden" name="threshold" value="{{ item.threshold if item.threshold is not none else '' }}" />
-                    {% endif %}
-                  </div>
-                  <div class="flex flex-wrap gap-2 lg:col-span-12 lg:justify-end">
-                    <input type="hidden" name="name" value="{{ item.name }}" />
-                    <input type="hidden" name="store_id" value="{{ selected_store }}" />
-                    {% if permissions.can_adjust_in %}
-                      <button class="px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
-                    {% endif %}
-                    {% if permissions.can_adjust_out %}
-                      <button class="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-600 hover:bg-amber-500/10" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
-                    {% endif %}
-                    {% if permissions.can_manage_items and stores|length > 1 %}
-                      <button class="px-3 py-2 rounded-lg border border-cyan-500/40 text-cyan-600 hover:bg-cyan-500/10" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
-                    {% endif %}
-                    {% if permissions.can_manage_items %}
-                      <button class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10" type="submit" name="action" value="update">保存修改</button>
-                      <button class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
-                    {% endif %}
-                  </div>
-                </form>
+                  {% if permissions.can_manage_users %}
+                    <a href="{{ url_for('manage_users') }}">用户管理</a>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('logout') }}" style="margin:0;">
+                    <button type="submit">退出登录</button>
+                  </form>
+                </div>
               </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="p-10 text-center text-slate-500">暂无库存记录，点右上角「新增」录入第一条库存。</div>
-        {% endif %}
-      </section>
-
-      {% if permissions.can_view_history %}
-      <!-- Sidebar -->
-      <aside class="space-y-4">
-        <section class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> 最近动态 <span class="text-xs font-normal text-slate-500">共 {{ timeline_pagination.total }} 条</span></h3>
-            <div class="flex items-center gap-2">
-              <a class="text-sm px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/history/export">导出记录</a>
-              {% if permissions.can_clear_history %}
-                <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
-                  <button type="submit" class="text-sm px-2 py-1 rounded-lg border border-red-400/40 text-red-600 hover:bg-red-500/10">清除记录</button>
-                </form>
+              <button id="themeToggle" class="btn theme-toggle" type="button" aria-label="切换深浅色" aria-pressed="false">
+                <svg class="theme-toggle__icon theme-toggle__icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M17.99 17.99l1.79 1.79M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M17.99 6.01l1.79-1.79" />
+                </svg>
+                <svg class="theme-toggle__icon theme-toggle__icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 14.25A7.25 7.25 0 0110.75 4a6.25 6.25 0 000 12.5A7.25 7.25 0 0121 14.25z" />
+                </svg>
+              </button>
+            </div>
+            <div class="mobile-only">
+              <div style="display:flex; gap:12px;">
+                <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" />
+                <button type="button" data-search-button data-input-selector="#keywordMobile" class="btn btn--outline">搜索</button>
+              </div>
+              {% if permissions.can_manage_items %}
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button id="importTriggerM" class="btn btn--outline" type="button">导入</button>
+                  <a class="btn btn--outline" href="/api/items/template">模板</a>
+                  <a class="btn btn--outline" href="/api/items/export">导出</a>
+                  <button class="btn btn--primary" data-open-modal="#addModal">新增</button>
+                </div>
               {% endif %}
             </div>
           </div>
-          <div class="mt-3 flex flex-wrap items-center gap-2 justify-between text-xs text-slate-500">
-            <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
-              {% for key, values in preserved_query.items() %}
-                {% if key not in ['timeline_sku', 'timeline_page'] %}
-                  {% for value in values %}
-                    <input type="hidden" name="{{ key }}" value="{{ value }}" />
-                  {% endfor %}
-                {% endif %}
-              {% endfor %}
-              <input type="hidden" name="timeline_page" value="1" />
-              <label class="flex items-center gap-1">
-                <span>筛选 SKU</span>
-                <select name="timeline_sku" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
-                  <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
-                  {% for name in timeline_sku_options %}
-                    <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-            </form>
-            <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
-              {% for key, values in preserved_query.items() %}
-                {% if key not in ['timeline_per_page', 'timeline_page'] %}
-                  {% for value in values %}
-                    <input type="hidden" name="{{ key }}" value="{{ value }}" />
-                  {% endfor %}
-                {% endif %}
-              {% endfor %}
-              <input type="hidden" name="timeline_page" value="1" />
-              <label class="flex items-center gap-1">
-                <span>每页</span>
-                <select name="timeline_per_page" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
-                  {% for option in [5, 10, 20, 50] %}
-                    <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-            </form>
-            <div class="flex items-center gap-1">
-              <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
-              <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not timeline_pagination.has_prev %}pointer-events-none opacity-40{% endif %}">上一页</a>
-              <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not timeline_pagination.has_next %}pointer-events-none opacity-40{% endif %}">下一页</a>
-            </div>
-          </div>
-          <div class="mt-4">
-            {% if timeline %}
-              <ul class="space-y-3">
-                {% for event in timeline %}
-                  <li class="flex items-start gap-3">
-                    <span class="inline-flex text-xs px-2 py-1 rounded-lg border 
-                      {% if event.badge == 'success' %}border-emerald-500/30 text-emerald-600 bg-emerald-600/10{% elif event.badge == 'danger' %}border-red-500/30 text-red-600 bg-red-600/10{% else %}border-slate-400/30 text-slate-600 bg-slate-400/10{% endif %}">
-                      {{ event.type }}
-                    </span>
-                    <div class="min-w-0">
-                      <div class="text-sm font-medium">{{ event.name }}</div>
-                      <div class="text-xs text-slate-500">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                      <div class="text-xs text-slate-400 mt-1">操作人：{{ event.user }}</div>
-                      {% if event.details %}
-                        {% if event.details is string %}
-                          <div class="text-xs text-slate-500 mt-1">{{ event.details }}</div>
-                        {% else %}
-                          <ul class="text-xs text-slate-500 mt-2 list-disc list-inside">
-                            {% for detail in event.details %}
-                              <li>{{ detail }}</li>
-                            {% endfor %}
-                          </ul>
-                        {% endif %}
-                      {% endif %}
-                    </div>
-                  </li>
+        </header>
+        <main>
+          <section class="summary-grid">
+            <article class="summary-card">
+              <small>SKU 数量</small>
+              <strong>{{ summary.total_items }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>库存总数</small>
+              <strong>{{ summary.total_quantity }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>库存预警数量</small>
+              <strong style="color: {{ summary.low_stock_count and '#ef4444' or 'inherit' }};">{{ summary.low_stock_count }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>出入库</small>
+              <div class="panel__meta">入 {{ summary.latest_in|format_datetime('%Y-%m-%d %H:%M') }} · 出 {{ summary.latest_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
+            </article>
+          </section>
+
+          {% if low_stock_items %}
+            <section class="alert-stack">
+              <div class="panel__header">
+                <h3>库存预警提醒</h3>
+                <button class="btn btn--outline" data-open-modal="#lowStockModal">查看全部</button>
+              </div>
+              <p class="panel__meta">共有 {{ low_stock_items|length }} 个 SKU 达到阈值，请及时补货。</p>
+              <ul>
+                {% for item in low_stock_items[:4] %}
+                  <li>{{ item.name }} · 当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</li>
                 {% endfor %}
               </ul>
-            {% else %}
-              <p class="text-slate-500 text-sm">当前暂无出入库记录，开始第一次操作后即可在此查看。</p>
+            </section>
+          {% endif %}
+
+          <div class="content-grid {% if permissions.can_view_history %}two-column{% endif %}">
+            <section class="panel">
+              <div class="panel__header">
+                <h2>库存详情</h2>
+                <div class="panel__meta">共 {{ inventory_pagination.total }} 项</div>
+              </div>
+              <div class="pagination">
+                <form method="get" action="{{ url_for('index') }}">
+                  {% for key, values in preserved_query.items() %}
+                    {% if key not in ['inventory_per_page', 'inventory_page'] %}
+                      {% for value in values %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                      {% endfor %}
+                    {% endif %}
+                  {% endfor %}
+                  <input type="hidden" name="inventory_page" value="1" />
+                  <label>每页
+                    <select name="inventory_per_page" onchange="this.form.submit()">
+                      {% for option in [5, 10, 20, 50] %}
+                        <option value="{{ option }}" {% if inventory_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </form>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <span>第 {{ inventory_pagination.start_index or 0 }}-{{ inventory_pagination.end_index or 0 }} / {{ inventory_pagination.total }} 项</span>
+                  <a href="{{ inventory_pagination.has_prev and build_query(inventory_page=inventory_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
+                  <a href="{{ inventory_pagination.has_next and build_query(inventory_page=inventory_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                </div>
+              </div>
+              {% if items %}
+                <div id="inventoryList" class="inventory-list">
+                  {% for item in items %}
+                    {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
+                    {% set category_info = categories.get(item.category) %}
+                    <div class="inventory-item {% if is_low %}low{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
+                      <div class="item-top">
+                        <div>
+                          <div class="item-name">
+                            <span title="{{ item.name }}">{{ item.name }}</span>
+                            {% if is_low %}
+                              <span class="badge">库存预警</span>
+                            {% endif %}
+                          </div>
+                          <div class="item-details">
+                            <span>最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</span>
+                            <span>最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</span>
+                            {% if item.threshold is not none %}
+                              <span {% if is_low %}style="color:#ef4444;"{% endif %}>阈值提醒：≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}{% if is_low %}（当前已触发）{% endif %}</span>
+                            {% else %}
+                              <span>未设置阈值提醒</span>
+                            {% endif %}
+                            <span>分类：{{ category_info.name if category_info else '未分类' }}</span>
+                          </div>
+                        </div>
+                        <span class="quantity-chip">{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</span>
+                      </div>
+                      <form class="inventory-form" method="post" action="/submit">
+                        {% if permissions.can_manage_items %}
+                          <label>
+                            设置数量
+                            <input id="quantity-{{ loop.index }}" name="quantity" type="number" min="0" step="1" value="" placeholder="当前 {{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}" />
+                          </label>
+                        {% endif %}
+                        <label>
+                          单位
+                          {% if permissions.can_manage_items %}
+                            <input id="unit-{{ loop.index }}" name="unit" value="{{ item.unit }}" placeholder="件" />
+                          {% else %}
+                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">{{ item.unit or '—' }}</div>
+                            <input type="hidden" name="unit" value="{{ item.unit }}" />
+                          {% endif %}
+                        </label>
+                        <label>
+                          库存分类
+                          {% if permissions.can_manage_categories %}
+                            <select name="category">
+                              {% for category_id, category in categories.items() %}
+                                <option value="{{ category_id }}" {% if category_id == item.category %}selected{% endif %}>{{ category.name }}</option>
+                              {% endfor %}
+                            </select>
+                          {% else %}
+                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">{{ category_info.name if category_info else '未分类' }}</div>
+                            <input type="hidden" name="category" value="{{ item.category }}" />
+                          {% endif %}
+                        </label>
+                        <label>
+                          阈值提醒{% if permissions.can_manage_threshold %}（可选）{% else %}（仅管理员可改）{% endif %}
+                          {% if permissions.can_manage_threshold %}
+                            <input id="threshold-{{ loop.index }}" name="threshold" type="number" min="0" step="1" value="{{ item.threshold if item.threshold is not none else '' }}" placeholder="例如 10" />
+                          {% else %}
+                            <div class="panel__meta" style="padding:12px; border:1px dashed var(--border); border-radius:12px;">
+                              {% if item.threshold is not none %}
+                                ≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}
+                              {% else %}
+                                未设置阈值
+                              {% endif %}
+                            </div>
+                            <input type="hidden" name="threshold" value="{{ item.threshold if item.threshold is not none else '' }}" />
+                          {% endif %}
+                        </label>
+                        <div class="actions">
+                          <input type="hidden" name="name" value="{{ item.name }}" />
+                          <input type="hidden" name="store_id" value="{{ selected_store }}" />
+                          {% if permissions.can_adjust_in %}
+                            <button class="btn btn--outline" type="button" data-adjust="in" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">入库</button>
+                          {% endif %}
+                          {% if permissions.can_adjust_out %}
+                            <button class="btn btn--outline" type="button" data-adjust="out" data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}">出库</button>
+                          {% endif %}
+                          {% if permissions.can_manage_items and stores|length > 1 %}
+                            <button class="btn btn--outline" type="button" data-transfer data-name="{{ item.name }}" data-unit="{{ item.unit or '' }}" data-current="{{ item.quantity }}" data-store="{{ selected_store }}" data-store-name="{{ stores[selected_store]['name'] }}">调拨</button>
+                          {% endif %}
+                          {% if permissions.can_manage_items %}
+                            <button class="btn btn--primary" type="submit" name="action" value="update">保存修改</button>
+                            <button class="btn btn--danger" type="submit" name="action" value="delete" onclick="return confirm('确认删除 {{ item.name }} 吗？');">删除</button>
+                          {% endif %}
+                        </div>
+                      </form>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="panel__meta" style="padding:40px; text-align:center;">暂无库存记录，点击“库存操作”中的新增录入第一条库存。</div>
+              {% endif %}
+            </section>
+
+            {% if permissions.can_view_history %}
+              <aside class="panel">
+                <div class="panel__header">
+                  <h2>最近动态</h2>
+                  <div class="panel__meta">共 {{ timeline_pagination.total }} 条</div>
+                </div>
+                <div class="timeline-controls">
+                  <div class="timeline-actions">
+                    <a class="btn btn--outline" href="/api/history/export">导出记录</a>
+                    {% if permissions.can_clear_history %}
+                      <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
+                        <button type="submit" class="btn btn--danger">清除记录</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  <div class="timeline-filters">
+                    <form method="get" action="{{ url_for('index') }}">
+                      {% for key, values in preserved_query.items() %}
+                        {% if key not in ['timeline_sku', 'timeline_page'] %}
+                          {% for value in values %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                          {% endfor %}
+                        {% endif %}
+                      {% endfor %}
+                      <input type="hidden" name="timeline_page" value="1" />
+                      <label>筛选 SKU
+                        <select name="timeline_sku" onchange="this.form.submit()">
+                          <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
+                          {% for name in timeline_sku_options %}
+                            <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                    </form>
+                    <form method="get" action="{{ url_for('index') }}">
+                      {% for key, values in preserved_query.items() %}
+                        {% if key not in ['timeline_per_page', 'timeline_page'] %}
+                          {% for value in values %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                          {% endfor %}
+                        {% endif %}
+                      {% endfor %}
+                      <input type="hidden" name="timeline_page" value="1" />
+                      <label>每页
+                        <select name="timeline_per_page" onchange="this.form.submit()">
+                          {% for option in [5, 10, 20, 50] %}
+                            <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                    </form>
+                  </div>
+                  <div class="timeline-pagination">
+                    <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
+                    <div class="timeline-pagination__buttons">
+                      <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
+                      <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                    </div>
+                  </div>
+                </div>
+                <div class="timeline-list">
+                  {% if timeline %}
+                    {% for event in timeline %}
+                      <article class="timeline-item">
+                        <div class="timeline-item__marker">
+                          <span class="timeline-badge {% if event.badge == 'success' %}success{% elif event.badge == 'danger' %}danger{% else %}neutral{% endif %}">{{ event.type }}</span>
+                          <time class="timeline-item__time" datetime="{{ event.timestamp.isoformat() if event.timestamp is not none else '' }}">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</time>
+                        </div>
+                        <div class="timeline-item__content">
+                          <div class="timeline-item__title">{{ event.name }}</div>
+                          <div class="timeline-item__meta">操作人：{{ event.user }}</div>
+                          {% if event.details %}
+                            {% if event.details is string %}
+                              <div class="timeline-item__details">{{ event.details }}</div>
+                            {% else %}
+                              <ul class="timeline-item__details timeline-item__list">
+                                {% for detail in event.details %}
+                                  <li>{{ detail }}</li>
+                                {% endfor %}
+                              </ul>
+                            {% endif %}
+                          {% endif %}
+                        </div>
+                      </article>
+                    {% endfor %}
+                  {% else %}
+                    <div class="panel__meta" style="text-align:center; padding:32px;">当前暂无出入库记录，开始第一次操作后即可在此查看。</div>
+                  {% endif %}
+                </div>
+              </aside>
             {% endif %}
           </div>
-        </section>
-
-      </aside>
-      {% endif %}
-    </main>
-
-    <!-- Import Preview Modal -->
-    <div id="importPreviewModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-3xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in space-y-5">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-semibold">导入前检查</h2>
-            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">请确认系统已正确识别即将导入的 SKU 数据。</p>
-          </div>
-          <button type="button" id="importPreviewClose" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
-        </div>
-        <div id="importPreviewStatus" class="text-sm text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 rounded-xl px-4 py-3">
-          请按照模板准备表格并选择文件，系统会在导入前完成检查。
-        </div>
-        <div class="border border-slate-200/60 dark:border-white/10 rounded-xl overflow-hidden">
-          <div class="max-h-72 overflow-y-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-100/80 dark:bg-white/5 text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th class="px-4 py-2 text-left font-medium">行号</th>
-                  <th class="px-4 py-2 text-left font-medium">SKU 名称</th>
-                  <th class="px-4 py-2 text-left font-medium">数量</th>
-                  <th class="px-4 py-2 text-left font-medium">单位</th>
-                  <th class="px-4 py-2 text-left font-medium">分类</th>
-                  <th class="px-4 py-2 text-left font-medium">阈值提醒</th>
-                  <th class="px-4 py-2 text-left font-medium">识别状态</th>
-                </tr>
-              </thead>
-              <tbody id="importPreviewTable" class="divide-y divide-slate-200/60 dark:divide-white/5 bg-white dark:bg-slate-900">
-                <tr>
-                  <td colspan="7" class="px-4 py-6 text-center text-sm text-slate-400">等待文件上传</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div id="importPreviewSummary" class="text-sm text-slate-500 dark:text-slate-400"></div>
-        <div class="flex justify-end gap-2">
-          <button type="button" id="importPreviewCancel" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
-          <button type="button" id="importPreviewConfirm" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">确认导入</button>
-        </div>
+        </main>
       </div>
     </div>
 
-    <!-- Hidden Import Form -->
-    <form id="importForm" class="hidden" action="/import" method="post" enctype="multipart/form-data">
-      <input id="importFile" name="file" type="file" accept=".csv,text/csv">
-      <input id="importStoreId" type="hidden" name="store_id" value="{{ selected_store }}">
-    </form>
-
     {% if low_stock_items %}
-      <div id="thresholdAlert" class="fixed inset-0 z-[55] flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-red-500/20 dark:bg-red-900/40 backdrop-blur-sm" data-close-alert></div>
-        <div class="relative w-full max-w-lg rounded-2xl border border-red-400/40 dark:border-red-500/40 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in flex flex-col max-h-[85vh]">
-          <div class="flex items-center justify-between gap-3">
-            <h2 class="text-lg font-semibold text-red-600 dark:text-red-300">库存阈值预警</h2>
-            <button class="h-9 w-9 grid place-items-center rounded-full hover:bg-red-100/60 dark:hover:bg-red-500/20" data-close-alert>&times;</button>
-          </div>
-          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">以下 {{ low_stock_items|length }} 个 SKU 当前库存已达到或低于设定的阈值，请及时安排补货：</p>
-          <ul class="mt-4 space-y-3 overflow-y-auto flex-1 pr-1 -mr-1 max-h-[50vh]">
-            {% for item in low_stock_items %}
-              <li class="flex items-start justify-between gap-3 rounded-xl border border-red-200/60 dark:border-red-500/30 bg-red-50/70 dark:bg-red-500/10 px-4 py-3">
-                <div class="min-w-0">
-                  <div class="font-medium text-red-700 dark:text-red-200 truncate" title="{{ item.name }}">{{ item.name }}</div>
-                  <div class="text-xs text-red-600/80 dark:text-red-200/80 mt-1">当前库存：{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}，阈值：{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</div>
-                </div>
-                <span class="shrink-0 inline-flex items-center text-xs px-3 py-1 rounded-full bg-white text-red-600 border border-red-300/70">低库存</span>
-              </li>
-            {% endfor %}
-          </ul>
-          <div class="mt-5 text-right pt-1">
-            <button type="button" class="px-4 py-2 rounded-lg bg-red-500 text-white hover:brightness-110" data-close-alert>我知道了</button>
+      <div id="lowStockModal" class="modal" data-modal>
+        <div class="modal__dialog">
+          <button type="button" class="modal__close" data-close-modal>&times;</button>
+          <h2 style="margin:0; font-size:22px;">库存预警列表</h2>
+          <p class="panel__meta">以下 SKU 库存不及阈值，请尽快安排补货。</p>
+          <table>
+            <thead>
+              <tr>
+                <th>SKU 名称</th>
+                <th>当前库存</th>
+                <th>阈值</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in low_stock_items %}
+                <tr>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                  <td>{{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div style="display:flex; justify-content:flex-end;">
+            <button class="btn btn--primary" data-close-modal>知道了</button>
           </div>
         </div>
       </div>
     {% endif %}
 
-    <!-- Add Item Modal -->
-    <div id="addModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">新增库存</h2>
-          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+    <div id="thresholdAlert" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:520px;">
+        <button type="button" class="modal__close" data-close-alert>&times;</button>
+        <h2 style="margin:0; font-size:22px;">库存预警提示</h2>
+        <p class="panel__meta">您有 SKU 库存已低于设置阈值，请及时处理。</p>
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn btn--primary" data-close-alert>我已知晓</button>
         </div>
-        <form method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
-          <input type="hidden" name="action" value="create">
-          <input type="hidden" name="store_id" value="{{ selected_store }}">
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">物品名称</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-name" name="name" placeholder="例如：咖啡豆" required>
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="grid gap-1 text-sm">
-              <span class="text-slate-500">初始数量</span>
-              <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-quantity" name="quantity" type="number" min="0" step="1" value="0" required>
-            </label>
-            <label class="grid gap-1 text-sm">
-              <span class="text-slate-500">单位（可选）</span>
-              <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-unit" name="unit" placeholder="件 / 盒 / 千克">
-            </label>
-          </div>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">库存分类</span>
-            <select class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" name="category">
+      </div>
+    </div>
+
+    <div id="addModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:600px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 style="margin:0; font-size:22px;">新增 SKU</h2>
+        <form method="post" action="/submit" class="inventory-form" novalidate>
+          <input type="hidden" name="action" value="create" />
+          <label>SKU 名称<input name="name" placeholder="请输入 SKU 名称" required /></label>
+          <label>数量<input name="quantity" type="number" min="0" step="1" value="0" /></label>
+          <label>单位<input name="unit" placeholder="例如 件、箱" /></label>
+          <label>分类
+            <select name="category">
               {% for category_id, category in categories.items() %}
-                <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
+                <option value="{{ category_id }}">{{ category.name }}</option>
               {% endfor %}
             </select>
           </label>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">阈值提醒（可选）</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="modal-threshold" name="threshold" type="number" min="0" step="1" placeholder="当库存 ≤ 此值时提醒">
-            <span class="text-xs text-slate-400">留空表示不设置预警。</span>
-          </label>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
-            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105">保存</button>
+          <label>阈值（可选）<input name="threshold" type="number" min="0" step="1" /></label>
+          <input type="hidden" name="store_id" value="{{ selected_store }}" />
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
+            <button type="submit" class="btn btn--primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="adjustModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:480px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 id="adjustModalTitle" style="margin:0; font-size:22px;">库存调整</h2>
+        <p id="adjustModalInfo" class="panel__meta"></p>
+        <form method="post" action="/submit" class="inventory-form" novalidate>
+          <input type="hidden" name="name" id="adjustName" />
+          <input type="hidden" name="store_id" value="{{ selected_store }}" />
+          <input type="hidden" name="action" id="adjustAction" />
+          <label id="adjustQuantityLabel">调整数量<input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required /></label>
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
+            <button type="submit" class="btn btn--primary" id="adjustSubmitBtn">确认</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Adjust Quantity Modal -->
-    <div id="adjustModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold" id="adjustModalTitle">调整库存</h2>
-          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
-        </div>
-        <div class="mt-2 text-sm text-slate-500" id="adjustModalInfo"></div>
-        <form id="adjustForm" method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
-          <input type="hidden" name="action" id="adjustAction">
-          <input type="hidden" name="name" id="adjustName">
-          <input type="hidden" name="store_id" value="{{ selected_store }}">
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500" id="adjustQuantityLabel">数量</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="adjustQuantity" name="quantity" type="number" min="1" step="1" required>
-          </label>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
-            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105" id="adjustSubmitBtn">确认</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    {% if permissions.can_manage_items and stores|length > 1 %}
-    <!-- Transfer Modal -->
-    <div id="transferModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-md rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">SKU 调拨</h2>
-          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
-        </div>
-        <div class="mt-2 text-sm text-slate-500" id="transferInfo"></div>
-        <form id="transferForm" method="post" action="/submit" class="mt-4 grid gap-4" novalidate>
-          <input type="hidden" name="action" value="transfer">
-          <input type="hidden" name="name" id="transferName">
-          <input type="hidden" name="store_id" id="transferSourceStore" value="{{ selected_store }}">
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">目标门店</span>
-            <select class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="transferTargetStore" name="target_store_id" required>
+    <div id="transferModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:520px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 style="margin:0; font-size:22px;">库存调拨</h2>
+        <p id="transferInfo" class="panel__meta"></p>
+        <form method="post" action="/submit" class="inventory-form" novalidate>
+          <input type="hidden" name="action" value="transfer" />
+          <input type="hidden" name="name" id="transferName" />
+          <input type="hidden" name="store_id" id="transferSourceStore" value="{{ selected_store }}" />
+          <div class="panel__meta">当前调出门店：<strong>{{ stores[selected_store]['name'] }}</strong></div>
+          <label>调入门店
+            <select name="target_store_id" id="transferTargetStore">
               {% for store_id, store in stores.items() %}
                 <option value="{{ store_id }}">{{ store.name }}</option>
               {% endfor %}
             </select>
           </label>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">调拨数量</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" id="transferQuantity" name="quantity" type="number" min="1" step="1" required>
-          </label>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>取消</button>
-            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105" id="transferSubmitBtn">确认调拨</button>
+          <label>调拨数量<input id="transferQuantity" name="quantity" type="number" min="1" step="1" required /></label>
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
+            <button type="submit" class="btn btn--primary" id="transferSubmitBtn">确认调拨</button>
           </div>
         </form>
       </div>
     </div>
-    {% endif %}
 
-
-    <!-- Store Management Modal -->
-    <div id="storeModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-lg rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">门店管理</h2>
-          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
-        </div>
-        <form method="post" action="{{ url_for('create_store_route') }}" class="mt-4 grid gap-3" novalidate>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">新增门店名称</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" name="name" placeholder="例如：旗舰店" required>
-          </label>
-          <div class="flex justify-end gap-2">
-            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105">新增门店</button>
+    <div id="storeModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:520px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 style="margin:0; font-size:22px;">门店管理</h2>
+        <form method="post" action="{{ url_for('create_store_route') }}" class="inventory-form">
+          <label>新增门店名称<input name="name" placeholder="例如：旗舰店" required /></label>
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="submit" class="btn btn--primary">新增门店</button>
           </div>
         </form>
-        <div class="mt-6 space-y-3">
-          <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">现有门店</h3>
-          <ul class="space-y-2">
-            {% for store_id, store in stores.items() %}
-              <li class="flex items-center justify-between gap-3 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-2 text-sm">
-                <div>
-                  <div class="font-medium">{{ store.name }}</div>
-                  <div class="text-xs text-slate-500">SKU 数量：{{ store.items_count }}</div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <form method="post" action="{{ url_for('delete_store_route', store_id=store_id) }}" onsubmit="return confirm('确认删除 {{ store.name }} 吗？');">
-                    <button type="submit" class="px-3 py-1 rounded-lg border border-red-400/50 text-red-600 hover:bg-red-500/10">删除</button>
+        <div class="panel__meta">现有门店</div>
+        <div class="timeline-list">
+          {% for store_id, store in stores.items() %}
+            <div class="timeline-item" style="gap:10px;">
+              <div style="font-weight:600;">{{ store.name }}</div>
+              <div class="panel__meta">SKU 数量：{{ store.items_count }}</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                <form method="post" action="{{ url_for('delete_store_route', store_id=store_id) }}" onsubmit="return confirm('确认删除 {{ store.name }} 吗？');">
+                  <button type="submit" class="btn btn--danger">删除</button>
+                </form>
+                <form method="post" action="{{ url_for('delete_store_route', store_id=store_id) }}" onsubmit="return confirm('确认删除 {{ store.name }} 并清空其库存吗？');">
+                  <input type="hidden" name="cascade" value="1" />
+                  <button type="submit" class="btn btn--danger">连同库存删除</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div id="categoryModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:520px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 style="margin:0; font-size:22px;">分类管理</h2>
+        <form method="post" action="{{ url_for('create_category_route') }}" class="inventory-form" novalidate>
+          <label>新增分类名称<input name="name" placeholder="例如：饮品" required /></label>
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="submit" class="btn btn--primary">新增分类</button>
+          </div>
+        </form>
+        <div class="panel__meta">现有分类</div>
+        <div class="timeline-list" style="max-height:300px; overflow:auto;">
+          {% for category_id, category in categories.items() %}
+            <div class="timeline-item" style="gap:10px;">
+              <div style="font-weight:600;">{{ category.name }}</div>
+              <div class="panel__meta">ID：{{ category_id }}</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                {% if category_id != 'uncategorized' %}
+                  <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 吗？');">
+                    <button type="submit" class="btn btn--danger">删除</button>
                   </form>
-                  <form method="post" action="{{ url_for('delete_store_route', store_id=store_id) }}" onsubmit="return confirm('确认删除 {{ store.name }} 并清空其库存吗？');">
-                    <input type="hidden" name="cascade" value="1">
-                    <button type="submit" class="px-3 py-1 rounded-lg border border-red-500/60 text-red-600 hover:bg-red-600/10">连同库存删除</button>
+                  <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 并清空其下所有 SKU 吗？');">
+                    <input type="hidden" name="cascade" value="1" />
+                    <button type="submit" class="btn btn--danger">连同库存删除</button>
                   </form>
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
+                {% else %}
+                  <span class="panel__meta">系统默认分类</span>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
         </div>
       </div>
     </div>
 
-    <!-- Category Management Modal -->
-    <div id="categoryModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4" data-modal>
-      <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" data-close-modal></div>
-      <div class="relative w-full max-w-lg rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-xlsoft animate-in">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">分类管理</h2>
-          <button type="button" class="h-9 w-9 grid place-items-center rounded-full hover:bg-slate-100/70 dark:hover:bg-white/5" data-close-modal>&times;</button>
+    <div id="importPreviewModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:720px;">
+        <button type="button" class="modal__close" id="importPreviewClose">&times;</button>
+        <h2 style="margin:0; font-size:22px;">导入前检查</h2>
+        <p class="panel__meta">请确认系统已正确识别即将导入的 SKU 数据。</p>
+        <div id="importPreviewStatus" class="panel__meta"></div>
+        <div style="overflow:auto; border:1px solid var(--border); border-radius:16px;">
+          <table id="importPreviewTable"></table>
         </div>
-        <form method="post" action="{{ url_for('create_category_route') }}" class="mt-4 grid gap-3" novalidate>
-          <label class="grid gap-1 text-sm">
-            <span class="text-slate-500">新增分类名称</span>
-            <input class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" name="name" placeholder="例如：饮品" required>
-          </label>
-          <div class="flex justify-end gap-2">
-            <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white hover:brightness-105">新增分类</button>
-          </div>
-        </form>
-        <div class="mt-6 space-y-3">
-          <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">现有分类</h3>
-          <ul class="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {% for category_id, category in categories.items() %}
-              <li class="flex items-center justify-between gap-3 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-2 text-sm">
-                <div>
-                  <div class="font-medium">{{ category.name }}</div>
-                  <div class="text-xs text-slate-500">ID：{{ category_id }}</div>
-                </div>
-                <div class="flex items-center gap-2">
-                  {% if category_id != 'uncategorized' %}
-                    <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 吗？');">
-                      <button type="submit" class="px-3 py-1 rounded-lg border border-red-400/50 text-red-600 hover:bg-red-500/10">删除</button>
-                    </form>
-                    <form method="post" action="{{ url_for('delete_category_route', category_id=category_id) }}" onsubmit="return confirm('确认删除分类 {{ category.name }} 并清空其下所有 SKU 吗？');">
-                      <input type="hidden" name="cascade" value="1">
-                      <button type="submit" class="px-3 py-1 rounded-lg border border-red-500/60 text-red-600 hover:bg-red-600/10">连同库存删除</button>
-                    </form>
-                  {% else %}
-                    <span class="text-xs text-slate-400">系统默认分类</span>
-                  {% endif %}
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
+        <div id="importPreviewSummary" class="panel__meta"></div>
+        <div class="actions" style="justify-content:flex-end;">
+          <button type="button" class="btn btn--ghost" id="importPreviewCancel">取消</button>
+          <button type="button" class="btn btn--primary" id="importPreviewConfirm" disabled>确认导入</button>
         </div>
       </div>
     </div>
-    <!-- Toast -->
-    <div id="toast" class="fixed bottom-4 right-4 z-[70] hidden">
-      <div class="rounded-xl bg-emerald-600 text-white shadow-xlsoft px-4 py-3 text-sm">操作已提交</div>
+
+    <form id="importForm" method="post" action="/import" enctype="multipart/form-data" class="hidden">
+      <input type="file" id="importFile" name="file" accept=".xlsx,.xls,.csv" />
+      <input type="hidden" id="importStoreId" name="store_id" value="{{ selected_store }}" />
+    </form>
+
+    <div id="toast" class="toast hidden">
+      <div class="toast__body">操作已提交</div>
     </div>
 
-    <!-- Scripts -->
     <script>
-      // theme
       const root = document.documentElement;
+      const themeToggleBtn = document.getElementById('themeToggle');
       const getTheme = () => localStorage.getItem('theme');
       const setTheme = t => localStorage.setItem('theme', t);
-      const applyTheme = t => root.classList.toggle('dark', t === 'dark');
-      const initTheme = () => { const t = getTheme(); if (t) applyTheme(t); else if (window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme('dark'); };
+      const syncThemeToggle = theme => {
+        if (!themeToggleBtn) return;
+        themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        themeToggleBtn.dataset.theme = theme;
+      };
+      const applyTheme = theme => {
+        root.classList.toggle('dark', theme === 'dark');
+        syncThemeToggle(theme);
+      };
+      const initTheme = () => {
+        const storedTheme = getTheme();
+        if (storedTheme) {
+          applyTheme(storedTheme);
+        } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          applyTheme('dark');
+        }
+      };
       initTheme();
-      document.getElementById('themeToggle')?.addEventListener('click', () => { const t = root.classList.contains('dark') ? 'light' : 'dark'; applyTheme(t); setTheme(t); });
+      syncThemeToggle(root.classList.contains('dark') ? 'dark' : 'light');
+      themeToggleBtn?.addEventListener('click', () => {
+        const nextTheme = root.classList.contains('dark') ? 'light' : 'dark';
+        applyTheme(nextTheme);
+        setTheme(nextTheme);
+      });
 
-      // modal helpers
       function openModal(selector){
         const modal = document.querySelector(selector);
         if(!modal) return;
@@ -815,7 +1296,6 @@
         });
       });
 
-      // adjust modal wiring
       (function setupAdjustModal(){
         const adjustModal = document.getElementById('adjustModal');
         const adjustButtons = document.querySelectorAll('[data-adjust]');
@@ -918,7 +1398,6 @@
               transferQuantityInput.disabled = true;
               transferSubmitBtn.disabled = true;
               transferQuantityInput.placeholder = '当前库存不足，无法调拨';
-              infoText += ' · 当前库存不足以调拨';
             }
             transferInfo.textContent = infoText;
             openModal('#transferModal');
@@ -931,18 +1410,20 @@
         });
       })();
 
-      // toast
       const toast = document.getElementById('toast');
-      function showToast(){ if(!toast) return; toast.classList.remove('hidden'); setTimeout(()=>toast.classList.add('hidden'), 1800); }
-      document.querySelectorAll('form').forEach(f=>{
-        f.addEventListener('submit', () => { setTimeout(showToast, 50); });
-      });
+      let toastTimer = null;
+      function showToast(){
+        if(!toast) return;
+        toast.classList.remove('hidden');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toast.classList.add('hidden');
+        }, 2400);
+      }
 
-      // import wiring with preview
       const fileInput = document.getElementById('importFile');
       const importForm = document.getElementById('importForm');
       const importStoreInput = document.getElementById('importStoreId');
-      const storeSelect = document.querySelector('select[name="store_id"]');
       const importPreviewModal = document.getElementById('importPreviewModal');
       const importPreviewStatus = document.getElementById('importPreviewStatus');
       const importPreviewTable = document.getElementById('importPreviewTable');
@@ -953,127 +1434,61 @@
       const importTriggers = [document.getElementById('importTrigger'), document.getElementById('importTriggerM')].filter(Boolean);
       let pendingImportFile = null;
 
+      function renderPreviewRows(rows, options = {}){
+        if(!importPreviewTable) return;
+        const emptyText = options.emptyText || '暂无可预览数据';
+        if(!rows.length){
+          importPreviewTable.innerHTML = `<tbody><tr><td style="padding:16px; color:var(--muted);">${emptyText}</td></tr></tbody>`;
+          return;
+        }
+        const headers = Object.keys(rows[0]);
+        importPreviewTable.innerHTML = [
+          '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead>',
+          '<tbody>' + rows.map(row => '<tr>' + headers.map(h => `<td>${row[h] ?? ''}</td>`).join('') + '</tr>').join('') + '</tbody>'
+        ].join('');
+        if(importPreviewSummary){
+          importPreviewSummary.textContent = `已识别 ${rows.length} 条记录，请确认无误后导入。`;
+        }
+        if(importPreviewConfirm){
+          importPreviewConfirm.disabled = false;
+        }
+      }
+
+      function setPreviewStatus(message, variant){
+        if(!importPreviewStatus) return;
+        importPreviewStatus.textContent = message;
+        importPreviewStatus.style.color = variant === 'error' ? '#ef4444' : 'var(--muted)';
+      }
+
       function currentStoreId(){
-        if(storeSelect){
-          return storeSelect.value;
-        }
-        if(importStoreInput){
-          return importStoreInput.value || '';
-        }
-        return '';
+        return importStoreInput?.value || document.querySelector('select[name="store_id"]')?.value || '';
       }
 
       function syncImportStore(){
-        if(importStoreInput){
-          importStoreInput.value = currentStoreId();
-        }
+        if(!importStoreInput) return;
+        importStoreInput.value = currentStoreId();
       }
 
-      function setPreviewStatus(message, variant = 'info'){
-        if(!importPreviewStatus){
-          return;
-        }
-        importPreviewStatus.textContent = message;
-        if(variant === 'error'){
-          importPreviewStatus.classList.add('text-red-600','dark:text-red-300');
-        } else {
-          importPreviewStatus.classList.remove('text-red-600','dark:text-red-300');
-        }
-      }
-
-      function renderPreviewRows(rows, options = {}){
-        const { emptyText = '未识别到可导入的数据' } = options;
-        if(!importPreviewTable){
-          return;
-        }
-        importPreviewTable.innerHTML = '';
-        if(!Array.isArray(rows) || !rows.length){
-          const emptyRow = document.createElement('tr');
-          const emptyCell = document.createElement('td');
-          emptyCell.colSpan = 7;
-          emptyCell.className = 'px-4 py-6 text-center text-sm text-slate-400';
-          emptyCell.textContent = emptyText;
-          emptyRow.appendChild(emptyCell);
-          importPreviewTable.appendChild(emptyRow);
-          if(importPreviewSummary){
-            importPreviewSummary.textContent = '';
-          }
-          if(importPreviewConfirm){
-            importPreviewConfirm.disabled = true;
-            importPreviewConfirm.textContent = '确认导入';
-          }
-          return;
-        }
-        let validCount = 0;
-        rows.forEach(row => {
-          const tr = document.createElement('tr');
-          const isValid = Boolean(row && row.valid);
-          if(isValid){
-            validCount += 1;
-            tr.className = 'bg-white dark:bg-slate-900';
-          } else {
-            tr.className = 'bg-red-50/70 dark:bg-red-500/10';
-          }
-          const categoryName = row?.category_name || '未分类';
-          const categoryInput = row?.category_input || '';
-          const categoryText = categoryInput && categoryInput !== categoryName
-            ? `${categoryName}（原始：${categoryInput}）`
-            : categoryName;
-          const messages = Array.isArray(row?.messages) ? row.messages : [];
-          const statusText = isValid
-            ? '可导入'
-            : messages.length
-              ? `将被忽略：${messages.join('；')}`
-              : '将被忽略：数据格式异常';
-          const cells = [
-            String(row?.index ?? ''),
-            row?.name || '',
-            row?.quantity === 0 || row?.quantity ? String(row.quantity) : '—',
-            row?.unit ? String(row.unit) : '—',
-            categoryText,
-            row?.threshold === 0 || row?.threshold ? String(row.threshold) : '—',
-            statusText,
-          ];
-          cells.forEach((value, idx) => {
-            const td = document.createElement('td');
-            td.className = 'px-4 py-2 text-sm align-top';
-            if(idx === 6){
-              td.className += ' max-w-xs';
-            }
-            td.textContent = value;
-            tr.appendChild(td);
-          });
-          importPreviewTable.appendChild(tr);
-        });
-        const total = rows.length;
-        const invalidCount = total - validCount;
+      function resetImportPreview(){
+        if(!importPreviewModal) return;
+        closeModal('#importPreviewModal');
+        setPreviewStatus('');
         if(importPreviewSummary){
-          let summary = `共识别 ${total} 条记录`;
-          if(validCount){
-            summary += `，其中 ${validCount} 条可导入`;
-          }
-          if(invalidCount){
-            summary += `，${invalidCount} 条存在问题`;
-          }
-          importPreviewSummary.textContent = summary;
+          importPreviewSummary.textContent = '';
         }
+        renderPreviewRows([], { emptyText: '等待选择文件…' });
         if(importPreviewConfirm){
-          importPreviewConfirm.disabled = validCount === 0;
-          importPreviewConfirm.textContent = validCount ? `确认导入（${validCount} 条）` : '确认导入';
+          importPreviewConfirm.disabled = true;
+          importPreviewConfirm.textContent = '确认导入';
         }
-      }
-
-      function resetImportPreview(options = {}){
-        const { preserveFile = false } = options;
         pendingImportFile = null;
-        if(fileInput && !preserveFile){
+        if(fileInput){
           fileInput.value = '';
         }
-        setPreviewStatus('请按照模板准备表格并选择文件，系统会在导入前完成检查。');
-        renderPreviewRows([], { emptyText: '等待文件上传' });
       }
 
       syncImportStore();
+      const storeSelect = document.querySelector('select[name="store_id"]');
       storeSelect?.addEventListener('change', syncImportStore);
       importPreviewCancel?.addEventListener('click', () => resetImportPreview());
       importPreviewClose?.addEventListener('click', () => resetImportPreview());
@@ -1161,7 +1576,6 @@
         }
       });
 
-      // menu toggles
       const menuPairs = [
         { button: document.getElementById('actionsMenuBtn'), menu: document.getElementById('actionsMenu') },
         { button: document.getElementById('userMenuBtn'), menu: document.getElementById('userMenu') }
@@ -1188,7 +1602,6 @@
         if(event.key === 'Escape') closeMenus();
       });
 
-      // threshold alert modal
       const thresholdAlert = document.getElementById('thresholdAlert');
       thresholdAlert?.querySelectorAll('[data-close-alert]')?.forEach(el => {
         el.addEventListener('click', () => {
@@ -1198,57 +1611,32 @@
 
       const keywordInputs = document.querySelectorAll('[data-keyword-input]');
       function submitKeyword(value){
-        const url = new URL(window.location.href);
         const trimmed = value.trim();
+        const url = new URL(window.location.href);
         const currentSearch = url.searchParams.get('inventory_search') || '';
-        const currentPage = url.searchParams.get('inventory_page') || '1';
         if(trimmed){
-          if(trimmed === currentSearch && currentPage === '1'){
-            return;
-          }
           url.searchParams.set('inventory_search', trimmed);
         } else {
-          if(!currentSearch && currentPage === '1'){
-            return;
-          }
           url.searchParams.delete('inventory_search');
         }
-        url.searchParams.set('inventory_page', '1');
+        if(trimmed !== currentSearch){
+          url.searchParams.set('inventory_page', '1');
+        }
         window.location.href = url.toString();
       }
       keywordInputs.forEach(input => {
-        input.addEventListener('input', () => {
-          const value = input.value;
-          keywordInputs.forEach(other => {
-            if(other !== input && other.value !== value){
-              other.value = value;
-            }
-          });
-        });
-        input.addEventListener('keydown', (event) => {
+        input.addEventListener('keydown', event => {
           if(event.key === 'Enter'){
             event.preventDefault();
-            submitKeyword(input.value);
+            submitKeyword(input.value || '');
           }
-        });
-        input.addEventListener('search', () => {
-          submitKeyword(input.value);
         });
       });
-
       document.querySelectorAll('[data-search-button]').forEach(button => {
+        const selector = button.getAttribute('data-input-selector');
         button.addEventListener('click', () => {
-          const selector = button.getAttribute('data-input-selector');
-          let value = '';
-          if(selector){
-            const target = document.querySelector(selector);
-            if(target){
-              value = target.value;
-            }
-          } else if(keywordInputs.length){
-            value = keywordInputs[0].value;
-          }
-          submitKeyword(value);
+          const input = selector ? document.querySelector(selector) : null;
+          submitKeyword(input?.value || '');
         });
       });
 
@@ -1262,8 +1650,16 @@
           } else {
             url.searchParams.delete('category');
           }
+          url.searchParams.set('inventory_page', '1');
           window.location.href = url.toString();
         });
+      });
+
+      const importFormElement = document.getElementById('importForm');
+      importFormElement?.addEventListener('submit', () => {
+        setTimeout(() => {
+          showToast();
+        }, 200);
       });
     </script>
   </body>
