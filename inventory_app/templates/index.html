@@ -631,7 +631,11 @@
         box-shadow: var(--shadow);
         font-size: 14px;
       }
-      .mobile-only { display: none; }
+      .mobile-only {
+        display: none;
+        width: 100%;
+        gap: 12px;
+      }
       @media (max-width: 960px) {
         .app-shell { grid-template-columns: 1fr; }
         .sidebar {
@@ -645,7 +649,7 @@
         header.main-header { position: static; }
         .header-inner { padding: 20px 24px; }
         main { padding: 24px; }
-        .mobile-only { display: block; }
+        .mobile-only { display: grid; }
       }
       @media (max-width: 640px) {
         .search-group { flex-direction: column; align-items: stretch; }
@@ -755,102 +759,19 @@
                 </svg>
               </button>
             </div>
-          </div>
-        </div>
-        <button id="themeToggle" type="button" class="ml-2 inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-slate-900/60 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-200 shadow-sm hover:bg-slate-100/80 dark:hover:bg-white/10 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-900" aria-label="切换主题" aria-pressed="false">
-          <span class="relative inline-flex h-6 w-12 items-center rounded-full bg-slate-200/70 dark:bg-slate-700/60 px-1 transition-colors">
-            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm transition-transform duration-300 ease-out translate-x-0 dark:translate-x-5">
-              <svg class="w-3.5 h-3.5 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="4"/>
-                <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2m-3.66-7.07 1.41 1.41M4.93 19.07l1.41-1.41"/>
-              </svg>
-              <svg class="hidden w-3.5 h-3.5 text-sky-400 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-              </svg>
-            </span>
-          </span>
-          <span class="theme-label hidden text-xs font-medium text-slate-600 dark:text-slate-200 sm:inline">深色模式</span>
-        </button>
-      </div>
-      <div class="mobile-nav border-t border-slate-200/60 dark:border-white/10">
-        <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-2 text-sm">
-          <form method="post" action="{{ url_for('select_store') }}" class="w-full flex items-center gap-2">
-            <select name="store_id" class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" onchange="this.form.submit()">
-              {% for store_id, store in stores.items() %}
-                <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
-              {% endfor %}
-            </select>
-            {% if permissions.can_manage_stores %}
-              <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#storeModal">管理</button>
-            {% endif %}
-          </form>
-          <div class="w-full flex items-center gap-2">
-            <div class="relative flex-1">
-              <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
-              <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            </div>
-            <button type="button" data-search-button data-input-selector="#keywordMobile" class="h-10 px-4 rounded-lg bg-brand-600 text-white font-medium">搜索</button>
-          </div>
-          <div class="w-full flex items-center gap-2">
-            <select data-category-filter class="flex-1 rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
-              <option value="">全部分类</option>
-              {% for category_id, category in categories.items() %}
-                <option value="{{ category_id }}" {% if category_id == selected_category %}selected{% endif %}>{{ category.name }}</option>
-              {% endfor %}
-            </select>
-            {% if permissions.can_manage_categories %}
-              <button type="button" class="px-3 py-2 rounded-lg border border-slate-200/60 dark:border-white/10" data-open-modal="#categoryModal">分类管理</button>
-            {% endif %}
-          </div>
-          <div class="text-slate-600 dark:text-slate-300">
-            {{ current_user.username }}
-            <span class="text-slate-400 dark:text-slate-500">· {{ role_labels.get(current_user.role, current_user.role) }}</span>
-          </div>
-          {% if permissions.can_manage_users %}
-            <a href="{{ url_for('manage_users') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">用户管理</a>
-          {% endif %}
-          {% if permissions.can_view_history %}
-            <a href="{{ url_for('analytics_dashboard') }}" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">出入库统计</a>
-          {% endif %}
-          <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
-          </form>
-        </div>
-      </div>
-    </header>
-
-    <!-- Hero KPIs -->
-    <section class="relative">
-      <div class="absolute inset-0 -z-10 opacity-90 dark:opacity-70">
-        <div class="h-64 surface dark:hidden"></div>
-        <div class="h-64 hidden dark:block surface-dark"></div>
-      </div>
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-in">
-          <div class="col-span-1 lg:col-span-3 p-6 rounded-2xl shadow-xlsoft border border-white/40 dark:border-white/10 bg-white/60 dark:bg-slate-900/50 glass">
-            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-              <div>
-                <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/30 dark:border-white/5 text-slate-700 dark:text-slate-200">控制面板 <span class="opacity-60">实时把握库存动态</span></span>
-                <h1 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">库存控制中心</h1>
+            <div class="mobile-only">
+              <div style="display:flex; gap:12px;">
+                <input id="keywordMobile" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" />
+                <button type="button" data-search-button data-input-selector="#keywordMobile" class="btn btn--outline">搜索</button>
               </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">SKU 数量</div>
-                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_items }}</div>
+              {% if permissions.can_manage_items %}
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button id="importTriggerM" class="btn btn--outline" type="button">导入</button>
+                  <a class="btn btn--outline" href="/api/items/template">模板</a>
+                  <a class="btn btn--outline" href="/api/items/export">导出</a>
+                  <button class="btn btn--primary" data-open-modal="#addModal">新增</button>
                 </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">库存总数</div>
-                  <div class="mt-1 text-2xl font-semibold">{{ summary.total_quantity }}</div>
-                </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">库存预警数量</div>
-                  <div class="mt-1 text-2xl font-semibold {% if summary.low_stock_count %}text-red-600 dark:text-red-300{% endif %}">{{ summary.low_stock_count }}</div>
-                </div>
-                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
-                  <div class="text-xs text-slate-500">出入库</div>
-                  <div class="mt-1 text-sm">入 {{ summary.latest_in|format_datetime('%Y-%m-%d %H:%M') }}<br>出 {{ summary.latest_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                </div>
-              </div>
+              {% endif %}
             </div>
           </div>
         </header>
@@ -889,30 +810,49 @@
             </section>
           {% endif %}
 
-        {% if items %}
-          <div id="inventoryList" class="divide-y divide-slate-200/70 dark:divide-white/5 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5">
-{% for item in items %}
-              {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
-              {% set category_info = categories.get(item.category) %}
-              <div class="px-5 py-5 transition hover:bg-slate-50/80 dark:hover:bg-white/5 {% if is_low %}bg-red-50/80 dark:bg-red-500/10 border-l-4 border-red-400/60 ring-1 ring-inset ring-red-400/40 dark:ring-red-400/30{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
-                <form class="grid grid-cols-1 gap-4 items-start lg:grid-cols-12 lg:items-end" method="post" action="/submit">
-                  <div class="lg:col-span-4">
-                    <div class="flex items-start md:items-center justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                          <div class="font-medium overflow-hidden text-ellipsis whitespace-nowrap md:whitespace-normal md:text-clip md:overflow-visible" title="{{ item.name }}">{{ item.name }}</div>
-                          {% if is_low %}
-                            <span class="inline-flex items-center gap-1 text-[11px] leading-4 font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-200 border border-red-500/30">
-                              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="m10.29 3.86-8 13.86A1.93 1.93 0 0 0 4 20h16a1.93 1.93 0 0 0 1.71-2.28l-8-13.86a2 2 0 0 0-3.42 0Z"/></svg>
-                              库存预警
-                            </span>
-                          {% endif %}
-                        </div>
-                        <div class="text-xs text-slate-500 mt-1">最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                        <div class="text-xs text-slate-500">最近出库：{{ item.last_out|format_datetime('%Y-%m-%d %H:%M') }}</div>
-                        {% if item.threshold is not none %}
-                          <div class="text-xs mt-1 {% if is_low %}text-red-600 dark:text-red-300{% else %}text-slate-500{% endif %}">
-                            阈值提醒：≤ {{ item.threshold }}{% if item.unit %} {{ item.unit }}{% endif %}{% if is_low %}（当前已触发预警）{% endif %}
+          <div class="content-grid {% if permissions.can_view_history %}two-column{% endif %}">
+            <section class="panel">
+              <div class="panel__header">
+                <h2>库存详情</h2>
+                <div class="panel__meta">共 {{ inventory_pagination.total }} 项</div>
+              </div>
+              <div class="pagination">
+                <form method="get" action="{{ url_for('index') }}">
+                  {% for key, values in preserved_query.items() %}
+                    {% if key not in ['inventory_per_page', 'inventory_page'] %}
+                      {% for value in values %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                      {% endfor %}
+                    {% endif %}
+                  {% endfor %}
+                  <input type="hidden" name="inventory_page" value="1" />
+                  <label>每页
+                    <select name="inventory_per_page" onchange="this.form.submit()">
+                      {% for option in [5, 10, 20, 50] %}
+                        <option value="{{ option }}" {% if inventory_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </form>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <span>第 {{ inventory_pagination.start_index or 0 }}-{{ inventory_pagination.end_index or 0 }} / {{ inventory_pagination.total }} 项</span>
+                  <a href="{{ inventory_pagination.has_prev and build_query(inventory_page=inventory_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
+                  <a href="{{ inventory_pagination.has_next and build_query(inventory_page=inventory_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not inventory_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                </div>
+              </div>
+              {% if items %}
+                <div id="inventoryList" class="inventory-list">
+                  {% for item in items %}
+                    {% set is_low = item.threshold is not none and item.quantity <= item.threshold %}
+                    {% set category_info = categories.get(item.category) %}
+                    <div class="inventory-item {% if is_low %}low{% endif %}" data-name="{{ item.name|lower }}" data-low-stock="{{ 'true' if is_low else 'false' }}">
+                      <div class="item-top">
+                        <div>
+                          <div class="item-name">
+                            <span title="{{ item.name }}">{{ item.name }}</span>
+                            {% if is_low %}
+                              <span class="badge">库存预警</span>
+                            {% endif %}
                           </div>
                           <div class="item-details">
                             <span>最近入库：{{ item.last_in|format_datetime('%Y-%m-%d %H:%M') }}</span>
@@ -1298,44 +1238,33 @@
 
     <script>
       const root = document.documentElement;
-      const themeToggleButton = document.getElementById('themeToggle');
-      const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+      const themeToggleBtn = document.getElementById('themeToggle');
       const getTheme = () => localStorage.getItem('theme');
       const setTheme = t => localStorage.setItem('theme', t);
-      const updateThemeToggle = t => {
-        if (!themeToggleButton) return;
-        themeToggleButton.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
-        themeToggleButton.dataset.theme = t;
-        const label = themeToggleButton.querySelector('.theme-label');
-        if (label) label.textContent = t === 'dark' ? '浅色模式' : '深色模式';
+      const syncThemeToggle = theme => {
+        if (!themeToggleBtn) return;
+        themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        themeToggleBtn.dataset.theme = theme;
       };
-      const applyTheme = t => {
-        root.classList.toggle('dark', t === 'dark');
-        updateThemeToggle(t);
+      const applyTheme = theme => {
+        root.classList.toggle('dark', theme === 'dark');
+        syncThemeToggle(theme);
       };
       const initTheme = () => {
-        const stored = getTheme();
-        if (stored) {
-          applyTheme(stored);
-          return;
+        const storedTheme = getTheme();
+        if (storedTheme) {
+          applyTheme(storedTheme);
+        } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          applyTheme('dark');
         }
-        applyTheme(themeMedia.matches ? 'dark' : 'light');
       };
       initTheme();
-      themeToggleButton?.addEventListener('click', () => {
+      syncThemeToggle(root.classList.contains('dark') ? 'dark' : 'light');
+      themeToggleBtn?.addEventListener('click', () => {
         const nextTheme = root.classList.contains('dark') ? 'light' : 'dark';
         applyTheme(nextTheme);
         setTheme(nextTheme);
       });
-      const handleSystemThemeChange = event => {
-        if (getTheme()) return;
-        applyTheme(event.matches ? 'dark' : 'light');
-      };
-      if (typeof themeMedia.addEventListener === 'function') {
-        themeMedia.addEventListener('change', handleSystemThemeChange);
-      } else if (typeof themeMedia.addListener === 'function') {
-        themeMedia.addListener(handleSystemThemeChange);
-      }
 
       function openModal(selector){
         const modal = document.querySelector(selector);
