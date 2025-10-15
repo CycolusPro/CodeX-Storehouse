@@ -94,7 +94,7 @@
             {% endif %}
           </div>
           <div class="relative flex-1 min-w-[180px] max-w-md">
-            <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+            <input id="keyword" data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 text-sm focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </div>
           <div class="flex items-center gap-2 shrink-0">
@@ -167,7 +167,7 @@
             {% endif %}
           </form>
           <div class="w-full relative">
-            <input data-keyword-input type="search" placeholder="搜索 SKU 名称" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
+            <input data-keyword-input type="search" placeholder="搜索 SKU 名称" value="{{ inventory_search }}" class="peer h-10 w-full rounded-lg bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 pl-9 pr-3 focus:outline-none focus:ring-4 ring-brand-500/20 focus:border-brand-500/60 transition">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 peer-focus:text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </div>
           <div class="w-full flex items-center gap-2">
@@ -237,7 +237,7 @@
       <!-- List -->
       <section class="xl:col-span-2 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-base font-semibold tracking-tight">库存详情 <span class="text-slate-500 font-normal">共 {{ items|length }} 项</span></h2>
+          <h2 class="text-base font-semibold tracking-tight">库存详情 <span class="text-slate-500 font-normal">共 {{ inventory_pagination.total }} 项</span></h2>
           <div class="md:hidden inline-flex rounded-xl overflow-hidden border border-slate-200/60 dark:border-white/10">
             {% if permissions.can_manage_items %}
               <button class="px-3 py-2 text-sm" id="importTriggerM">导入</button>
@@ -245,6 +245,32 @@
               <a class="px-3 py-2 text-sm" href="/api/items/export">导出</a>
               <button class="px-3 py-2 text-sm bg-brand-600 text-white" data-open-modal="#addModal">新增</button>
             {% endif %}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 justify-between text-xs text-slate-500">
+          <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
+            {% for key, values in preserved_query.items() %}
+              {% if key not in ['inventory_per_page', 'inventory_page'] %}
+                {% for value in values %}
+                  <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+            <input type="hidden" name="inventory_page" value="1" />
+            <label class="flex items-center gap-1">
+              <span>每页</span>
+              <select name="inventory_per_page" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
+                {% for option in [5, 10, 20, 50, 100] %}
+                  <option value="{{ option }}" {% if inventory_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </form>
+          <div class="flex items-center gap-1">
+            <span>第 {{ inventory_pagination.start_index or 0 }}-{{ inventory_pagination.end_index or 0 }} / {{ inventory_pagination.total }} 项</span>
+            <a href="{{ inventory_pagination.has_prev and build_query(inventory_page=inventory_pagination.prev_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not inventory_pagination.has_prev %}pointer-events-none opacity-40{% endif %}">上一页</a>
+            <a href="{{ inventory_pagination.has_next and build_query(inventory_page=inventory_pagination.next_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not inventory_pagination.has_next %}pointer-events-none opacity-40{% endif %}">下一页</a>
           </div>
         </div>
 
@@ -368,8 +394,8 @@
       <!-- Sidebar -->
       <aside class="space-y-4">
         <section class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> 最近动态（最新 5 条）</h3>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> 最近动态 <span class="text-xs font-normal text-slate-500">共 {{ timeline_pagination.total }} 条</span></h3>
             <div class="flex items-center gap-2">
               <a class="text-sm px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5" href="/api/history/export">导出记录</a>
               {% if permissions.can_clear_history %}
@@ -377,6 +403,50 @@
                   <button type="submit" class="text-sm px-2 py-1 rounded-lg border border-red-400/40 text-red-600 hover:bg-red-500/10">清除记录</button>
                 </form>
               {% endif %}
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2 justify-between text-xs text-slate-500">
+            <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
+              {% for key, values in preserved_query.items() %}
+                {% if key not in ['timeline_sku', 'timeline_page'] %}
+                  {% for value in values %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                  {% endfor %}
+                {% endif %}
+              {% endfor %}
+              <input type="hidden" name="timeline_page" value="1" />
+              <label class="flex items-center gap-1">
+                <span>筛选 SKU</span>
+                <select name="timeline_sku" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
+                  <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
+                  {% for name in timeline_sku_options %}
+                    <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </form>
+            <form method="get" action="{{ url_for('index') }}" class="flex items-center gap-1">
+              {% for key, values in preserved_query.items() %}
+                {% if key not in ['timeline_per_page', 'timeline_page'] %}
+                  {% for value in values %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                  {% endfor %}
+                {% endif %}
+              {% endfor %}
+              <input type="hidden" name="timeline_page" value="1" />
+              <label class="flex items-center gap-1">
+                <span>每页</span>
+                <select name="timeline_per_page" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-2 py-1" onchange="this.form.submit()">
+                  {% for option in [5, 10, 20, 50] %}
+                    <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </form>
+            <div class="flex items-center gap-1">
+              <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
+              <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not timeline_pagination.has_prev %}pointer-events-none opacity-40{% endif %}">上一页</a>
+              <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5 {% if not timeline_pagination.has_next %}pointer-events-none opacity-40{% endif %}">下一页</a>
             </div>
           </div>
           <div class="mt-4">
@@ -856,16 +926,26 @@
         });
       });
 
-      // search filter (only keyword; no sidebar filters as requested)
       const keywordInputs = document.querySelectorAll('[data-keyword-input]');
-      const list = document.getElementById('inventoryList');
-      function norm(s){ return (s||'').toString().trim().toLowerCase(); }
-      function applyKeywordFilter(value){
-        const kw = norm(value);
-        list?.querySelectorAll('[data-name]')?.forEach(row=>{
-          const name = row.getAttribute('data-name') || '';
-          row.style.display = !kw || name.includes(kw) ? '' : 'none';
-        });
+      let keywordTimer = null;
+      function submitKeyword(value){
+        const url = new URL(window.location.href);
+        const trimmed = value.trim();
+        const currentSearch = url.searchParams.get('inventory_search') || '';
+        const currentPage = url.searchParams.get('inventory_page') || '1';
+        if(trimmed){
+          if(trimmed === currentSearch && currentPage === '1'){
+            return;
+          }
+          url.searchParams.set('inventory_search', trimmed);
+        } else {
+          if(!currentSearch && currentPage === '1'){
+            return;
+          }
+          url.searchParams.delete('inventory_search');
+        }
+        url.searchParams.set('inventory_page', '1');
+        window.location.href = url.toString();
       }
       keywordInputs.forEach(input => {
         input.addEventListener('input', () => {
@@ -875,12 +955,27 @@
               other.value = value;
             }
           });
-          applyKeywordFilter(value);
+          if(keywordTimer){
+            clearTimeout(keywordTimer);
+          }
+          keywordTimer = setTimeout(() => submitKeyword(value), 400);
+        });
+        input.addEventListener('keydown', (event) => {
+          if(event.key === 'Enter'){
+            event.preventDefault();
+            if(keywordTimer){
+              clearTimeout(keywordTimer);
+            }
+            submitKeyword(input.value);
+          }
+        });
+        input.addEventListener('search', () => {
+          if(keywordTimer){
+            clearTimeout(keywordTimer);
+          }
+          submitKeyword(input.value);
         });
       });
-      if(keywordInputs.length){
-        applyKeywordFilter(keywordInputs[0].value);
-      }
 
       const categoryFilters = document.querySelectorAll('[data-category-filter]');
       categoryFilters.forEach(select => {

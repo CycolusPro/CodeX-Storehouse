@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
@@ -384,27 +385,121 @@ def create_app(
         def _is_low_stock(item: InventoryItem) -> bool:
             return item.threshold is not None and item.quantity <= item.threshold
 
-        items = sorted(
+        items_sorted = sorted(
             all_items,
             key=lambda item: (
                 not _is_low_stock(item),
                 item.name.casefold(),
             ),
         )
-        total_quantity = sum(item.quantity for item in items)
-        latest_in = _latest_timestamp(items, key="last_in")
-        latest_out = _latest_timestamp(items, key="last_out")
+        inventory_search = (request.args.get("inventory_search") or "").strip()
+
+        if inventory_search:
+            search_term = inventory_search.casefold()
+            items_filtered = [
+                item for item in items_sorted if search_term in item.name.casefold()
+            ]
+        else:
+            items_filtered = list(items_sorted)
+        total_quantity = sum(item.quantity for item in items_sorted)
+        latest_in = _latest_timestamp(items_sorted, key="last_in")
+        latest_out = _latest_timestamp(items_sorted, key="last_out")
         summary = {
-            "total_items": len(items),
+            "total_items": len(items_sorted),
             "total_quantity": total_quantity,
             "latest_in": latest_in,
             "latest_out": latest_out,
         }
-        history_entries = manager.list_history(store_id=selected_store, limit=5)
-        timeline = _recent_activity(history_entries, limit=5)
+        def _parse_positive_int(value: Optional[str], default: int) -> int:
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                return default
+            return parsed if parsed > 0 else default
+
+        inventory_per_page = _parse_positive_int(
+            request.args.get("inventory_per_page"), 10
+        )
+        inventory_page = _parse_positive_int(request.args.get("inventory_page"), 1)
+        inventory_total = len(items_filtered)
+        inventory_pages = (
+            max(1, math.ceil(inventory_total / inventory_per_page))
+            if inventory_total
+            else 1
+        )
+        if inventory_page > inventory_pages:
+            inventory_page = inventory_pages
+        inventory_start = (inventory_page - 1) * inventory_per_page
+        inventory_end = inventory_start + inventory_per_page
+        items = items_filtered[inventory_start:inventory_end]
+        inventory_pagination = {
+            "page": inventory_page,
+            "per_page": inventory_per_page,
+            "total": inventory_total,
+            "pages": inventory_pages,
+            "has_prev": inventory_page > 1,
+            "has_next": inventory_page < inventory_pages,
+            "prev_page": max(1, inventory_page - 1),
+            "next_page": min(inventory_pages, inventory_page + 1),
+            "start_index": inventory_start + 1 if inventory_total else 0,
+            "end_index": min(inventory_end, inventory_total),
+        }
+
+        history_entries = manager.list_history(store_id=selected_store)
+        timeline_sku = (request.args.get("timeline_sku") or "").strip()
+        if timeline_sku:
+            filtered_history = [
+                entry for entry in history_entries if entry.name == timeline_sku
+            ]
+        else:
+            filtered_history = history_entries
+
+        timeline_per_page = _parse_positive_int(
+            request.args.get("timeline_per_page"), 5
+        )
+        timeline_page = _parse_positive_int(request.args.get("timeline_page"), 1)
+        timeline_total = len(filtered_history)
+        timeline_pages = (
+            max(1, math.ceil(timeline_total / timeline_per_page))
+            if timeline_total
+            else 1
+        )
+        if timeline_page > timeline_pages:
+            timeline_page = timeline_pages
+        timeline_start = (timeline_page - 1) * timeline_per_page
+        timeline_end = timeline_start + timeline_per_page
+        timeline_entries = filtered_history[timeline_start:timeline_end]
+        timeline = _recent_activity(timeline_entries, limit=None)
+        timeline_pagination = {
+            "page": timeline_page,
+            "per_page": timeline_per_page,
+            "total": timeline_total,
+            "pages": timeline_pages,
+            "has_prev": timeline_page > 1,
+            "has_next": timeline_page < timeline_pages,
+            "prev_page": max(1, timeline_page - 1),
+            "next_page": min(timeline_pages, timeline_page + 1),
+            "start_index": timeline_start + 1 if timeline_total else 0,
+            "end_index": min(timeline_end, timeline_total),
+        }
+        timeline_sku_options = sorted({entry.name for entry in history_entries})
+
+        preserved_query = {key: request.args.getlist(key) for key in request.args}
+
+        def build_query(**updates: Any) -> str:
+            params = request.args.to_dict()
+            for key, value in updates.items():
+                if value is None:
+                    params.pop(key, None)
+                else:
+                    params[key] = value
+            return url_for("index", **params)
+
         import_summary = _parse_import_summary(request)
         low_stock_items = [
-            item for item in items if item.threshold is not None and item.quantity <= item.threshold
+            item
+            for item in items_sorted
+            if item.threshold is not None and item.quantity <= item.threshold
         ]
         return render_template(
             "index.html",
@@ -417,6 +512,13 @@ def create_app(
             categories=categories,
             selected_store=selected_store,
             selected_category=selected_category,
+            inventory_pagination=inventory_pagination,
+            timeline_pagination=timeline_pagination,
+            timeline_sku=timeline_sku,
+            timeline_sku_options=timeline_sku_options,
+            preserved_query=preserved_query,
+            build_query=build_query,
+            inventory_search=inventory_search,
         )
 
     @app.post("/history/clear")
@@ -1382,7 +1484,9 @@ def _history_statistics(
     return rows
 
 
-def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> list[Dict[str, Any]]:
+def _recent_activity(
+    entries: list[InventoryHistoryEntry], limit: Optional[int] = 20
+) -> list[Dict[str, Any]]:
     def _unit_suffix(unit: str) -> str:
         return f" {unit}" if unit else ""
 
@@ -1481,7 +1585,9 @@ def _recent_activity(entries: list[InventoryHistoryEntry], limit: int = 20) -> l
         )
 
     events.sort(key=lambda event: event["timestamp"], reverse=True)
-    return events[:limit]
+    if limit is not None:
+        return events[:limit]
+    return events
 
 
 if __name__ == "__main__":
