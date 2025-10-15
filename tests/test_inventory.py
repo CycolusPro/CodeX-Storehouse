@@ -1,6 +1,6 @@
-from io import BytesIO
+from io import BytesIO, StringIO
 import csv
-from io import StringIO
+import xlrd
 from pathlib import Path
 
 import pytest
@@ -319,7 +319,7 @@ def test_history_api_endpoint(tmp_path: Path) -> None:
     assert "action" in payload[0]
 
 
-def test_history_export_csv_format(tmp_path: Path) -> None:
+def test_history_export_xls_format(tmp_path: Path) -> None:
     pytest.importorskip("flask")
     from inventory_app.app import create_app
 
@@ -340,9 +340,10 @@ def test_history_export_csv_format(tmp_path: Path) -> None:
     response = client.get("/api/history/export")
     assert response.status_code == 200
 
-    text = response.data.decode("utf-8-sig")
-    reader = csv.DictReader(StringIO(text))
-    assert reader.fieldnames == [
+    workbook = xlrd.open_workbook(file_contents=response.data)
+    sheet = workbook.sheet_by_index(0)
+    header = [str(value).strip() for value in sheet.row_values(0)]
+    assert header == [
         "时间",
         "操作类型",
         "SKU 名称",
@@ -353,7 +354,12 @@ def test_history_export_csv_format(tmp_path: Path) -> None:
         "增减量",
         "当前量",
     ]
-    rows = list(reader)
+    rows = []
+    for row_index in range(1, sheet.nrows):
+        row_values = sheet.row_values(row_index)
+        if not any(str(value).strip() for value in row_values):
+            continue
+        rows.append(dict(zip(header, row_values)))
     assert rows
     latest = rows[0]
     assert latest["SKU 名称"] == "咖啡豆"
@@ -389,20 +395,26 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
 
     export_response = client.get("/api/history/stats/export?mode=sku")
     assert export_response.status_code == 200
-    export_text = export_response.data.decode("utf-8-sig")
-    export_stream = StringIO(export_text)
-    raw_reader = csv.reader(export_stream)
+    workbook = xlrd.open_workbook(file_contents=export_response.data)
+    sheet = workbook.sheet_by_index(0)
     metadata_rows = []
-    for row in raw_reader:
-        if not row:
+    row_index = 0
+    while row_index < sheet.nrows:
+        row_values = sheet.row_values(row_index)
+        if not any(str(value).strip() for value in row_values):
+            row_index += 1
             break
-        metadata_rows.append(row)
+        metadata_rows.append(row_values)
+        row_index += 1
     assert metadata_rows
-    metadata = {row[0]: row[1] if len(row) > 1 else "" for row in metadata_rows}
+    metadata = {
+        str(row[0]).strip(): row[1] if len(row) > 1 else ""
+        for row in metadata_rows
+    }
     assert "门店" in metadata
     assert metadata.get("统计时间范围")
     assert metadata.get("导出时间")
-    header = next(raw_reader)
+    header = [str(value).strip() for value in sheet.row_values(row_index)]
     assert header == [
         "SKU 名称",
         "分类",
@@ -412,7 +424,13 @@ def test_history_stats_export_and_dashboard(tmp_path: Path) -> None:
         "净变动",
         "截止库存",
     ]
-    export_rows = [dict(zip(header, row)) for row in raw_reader if any(row)]
+    row_index += 1
+    export_rows = []
+    for idx in range(row_index, sheet.nrows):
+        row_values = sheet.row_values(idx)
+        if not any(str(value).strip() for value in row_values):
+            continue
+        export_rows.append(dict(zip(header, row_values)))
     assert export_rows
     totals_row = export_rows[-1]
     assert totals_row["SKU 名称"] == "合计"
@@ -524,17 +542,25 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     export_resp = client.get("/api/items/export")
     assert export_resp.status_code == 200
     assert "inventory_export" in export_resp.headers["Content-Disposition"]
-    export_text = export_resp.data.decode("utf-8-sig")
-    header = export_text.splitlines()[0]
-    columns = header.split(",")
-    assert "SKU 名称" in columns
-    assert "库存阈值" in columns
-    assert "咖啡豆" in export_text
+    export_book = xlrd.open_workbook(file_contents=export_resp.data)
+    export_sheet = export_book.sheet_by_index(0)
+    export_header = [str(value).strip() for value in export_sheet.row_values(0)]
+    assert "SKU 名称" in export_header
+    assert "库存阈值" in export_header
+    data_rows = []
+    for row_idx in range(1, export_sheet.nrows):
+        row_values = export_sheet.row_values(row_idx)
+        if not any(str(value).strip() for value in row_values):
+            continue
+        data_rows.append(dict(zip(export_header, row_values)))
+    assert any(row.get("SKU 名称") == "咖啡豆" for row in data_rows)
 
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200
-    template_text = template_resp.data.decode("utf-8-sig")
-    assert "名称,数量,单位,阈值提醒,库存分类" == template_text.splitlines()[0]
+    template_book = xlrd.open_workbook(file_contents=template_resp.data)
+    template_sheet = template_book.sheet_by_index(0)
+    template_header = [str(value).strip() for value in template_sheet.row_values(0)]
+    assert template_header == ["名称", "数量", "单位", "阈值提醒", "库存分类"]
 
 
 def test_history_export_endpoint(tmp_path: Path) -> None:
@@ -553,15 +579,31 @@ def test_history_export_endpoint(tmp_path: Path) -> None:
 
     export_resp = client.get("/api/history/export")
     assert export_resp.status_code == 200
-    text = export_resp.data.decode("utf-8-sig")
-    lines = [line for line in text.splitlines() if line]
-    assert lines
-    assert (
-        lines[0]
-        == "时间,操作类型,SKU 名称,操作用户,门店,分类,初始量,增减量,当前量"
+    export_book = xlrd.open_workbook(file_contents=export_resp.data)
+    export_sheet = export_book.sheet_by_index(0)
+    header = [str(value).strip() for value in export_sheet.row_values(0)]
+    assert header == [
+        "时间",
+        "操作类型",
+        "SKU 名称",
+        "操作用户",
+        "门店",
+        "分类",
+        "初始量",
+        "增减量",
+        "当前量",
+    ]
+    records = []
+    for row_idx in range(1, export_sheet.nrows):
+        row_values = export_sheet.row_values(row_idx)
+        if not any(str(value).strip() for value in row_values):
+            continue
+        records.append(dict(zip(header, row_values)))
+    assert any(row.get("SKU 名称") == "咖啡豆" for row in records)
+    assert any(
+        row.get("操作类型") in {"入库", "出库"}
+        for row in records
     )
-    assert any("咖啡豆" in line for line in lines[1:])
-    assert any("入库" in line or "出库" in line for line in lines[1:])
 
 
 def test_import_form_endpoint(tmp_path: Path) -> None:
@@ -604,11 +646,11 @@ def test_template_roundtrip_import(tmp_path: Path) -> None:
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200
 
-    template_text = template_resp.data.decode("utf-8")
-    lines = template_text.splitlines()
-    assert len(lines) >= 2
-    lines[1] = "新品饮料,12,箱,3,饮料"
-    edited = "\n".join(lines)
+    template_book = xlrd.open_workbook(file_contents=template_resp.data)
+    template_sheet = template_book.sheet_by_index(0)
+    header = [str(value).strip() for value in template_sheet.row_values(0)]
+    assert header == ["名称", "数量", "单位", "阈值提醒", "库存分类"]
+    edited = ",".join(header) + "\n新品饮料,12,箱,3,饮料"
 
     parsed_rows = _parse_csv_rows(edited)
     assert parsed_rows and parsed_rows[0]["name"] == "新品饮料"

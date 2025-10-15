@@ -5,7 +5,7 @@ import csv
 import json
 import math
 from datetime import datetime, timedelta, timezone
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping
 from functools import wraps
@@ -25,6 +25,7 @@ from flask import (
     session,
     url_for,
 )
+import xlwt
 
 from .inventory import (
     InventoryHistoryEntry,
@@ -752,9 +753,9 @@ def create_app(
         rows = [
             {"名称": "示例SKU", "数量": 50, "单位": "件", "阈值提醒": 10, "库存分类": "未分类"},
         ]
-        content = _rows_to_csv(["名称", "数量", "单位", "阈值提醒", "库存分类"], rows)
+        content = _rows_to_xls(["名称", "数量", "单位", "阈值提醒", "库存分类"], rows)
         filename = _timestamped_filename("inventory_template")
-        return _csv_response(content, filename)
+        return _xls_response(content, filename)
 
     @app.get("/api/items/export")
     @login_required
@@ -784,9 +785,9 @@ def create_app(
                 localized_row[label] = "" if value is None else value
             localized_rows.append(localized_row)
         fieldnames = [label for _, label in header_map]
-        content = _rows_to_csv(fieldnames, localized_rows)
+        content = _rows_to_xls(fieldnames, localized_rows)
         filename = _timestamped_filename("inventory_export")
-        return _csv_response(content, filename)
+        return _xls_response(content, filename)
 
     @app.get("/api/history/export")
     @login_required
@@ -892,9 +893,9 @@ def create_app(
                 }
             )
         fieldnames = ["时间", "操作类型", "SKU 名称", "操作用户", "门店", "分类", "初始量", "增减量", "当前量"]
-        content = _rows_to_csv(fieldnames, rows)
+        content = _rows_to_xls(fieldnames, rows)
         filename = _timestamped_filename("inventory_history")
-        return _csv_response(content, filename)
+        return _xls_response(content, filename)
 
     @app.get("/analytics")
     @role_required("admin", "super_admin")
@@ -1014,9 +1015,9 @@ def create_app(
             ("统计时间范围", range_label),
             ("导出时间", datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")),
         ]
-        content = _rows_to_csv(fieldnames, csv_rows, metadata=metadata)
+        content = _rows_to_xls(fieldnames, csv_rows, metadata=metadata)
         filename = _timestamped_filename("inventory_history_stats")
-        return _csv_response(content, filename)
+        return _xls_response(content, filename)
 
     @app.post("/api/items/import/preview")
     @role_required("admin", "super_admin")
@@ -1274,35 +1275,39 @@ def _parse_threshold_value(value: Any) -> Optional[int]:
     return parsed
 
 
-def _rows_to_csv(
+def _rows_to_xls(
     fieldnames: Sequence[str],
     rows: Iterable[Dict[str, Any]],
     *,
     metadata: Optional[Sequence[tuple[str, Any]]] = None,
-) -> str:
-    buffer = StringIO()
-    buffer.write("\ufeff")
+) -> bytes:
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("Sheet1")
+    row_index = 0
     if metadata:
-        meta_writer = csv.writer(buffer)
         for key, value in metadata:
-            meta_writer.writerow([key, "" if value is None else value])
-        meta_writer.writerow([])
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
-    writer.writeheader()
+            sheet.write(row_index, 0, key)
+            sheet.write(row_index, 1, "" if value is None else value)
+            row_index += 1
+        row_index += 1
+    for col_index, field in enumerate(fieldnames):
+        sheet.write(row_index, col_index, field)
+    row_index += 1
     for row in rows:
-        safe_row = {}
-        for field in fieldnames:
+        for col_index, field in enumerate(fieldnames):
             value = row.get(field, "") if isinstance(row, dict) else ""
             if value is None:
                 value = ""
-            safe_row[field] = value
-        writer.writerow(safe_row)
+            sheet.write(row_index, col_index, value)
+        row_index += 1
+    buffer = BytesIO()
+    workbook.save(buffer)
     return buffer.getvalue()
 
 
-def _csv_response(content: str, filename: str) -> Response:
-    response = Response(content, mimetype="text/csv; charset=utf-8")
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}.csv"
+def _xls_response(content: bytes, filename: str) -> Response:
+    response = Response(content, mimetype="application/vnd.ms-excel")
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}.xls"
     return response
 
 
