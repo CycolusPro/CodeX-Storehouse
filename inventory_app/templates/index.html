@@ -218,7 +218,7 @@
                 <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-white/10 border border-white/30 dark:border-white/5 text-slate-700 dark:text-slate-200">控制面板 <span class="opacity-60">实时把握库存动态</span></span>
                 <h1 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">库存控制中心</h1>
               </div>
-              <div class="grid grid-cols-3 gap-3 w-full lg:w-auto">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
                 <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
                   <div class="text-xs text-slate-500">SKU 数量</div>
                   <div class="mt-1 text-2xl font-semibold">{{ summary.total_items }}</div>
@@ -226,6 +226,10 @@
                 <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
                   <div class="text-xs text-slate-500">库存总数</div>
                   <div class="mt-1 text-2xl font-semibold">{{ summary.total_quantity }}</div>
+                </div>
+                <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
+                  <div class="text-xs text-slate-500">库存预警数量</div>
+                  <div class="mt-1 text-2xl font-semibold {% if summary.low_stock_count %}text-red-600 dark:text-red-300{% endif %}">{{ summary.low_stock_count }}</div>
                 </div>
                 <div class="p-4 rounded-xl bg-white/70 dark:bg-white/5 border border-white/40 dark:border-white/10">
                   <div class="text-xs text-slate-500">出入库</div>
@@ -303,7 +307,7 @@
                     <div class="flex items-start md:items-center justify-between gap-3">
                       <div class="min-w-0">
                         <div class="flex items-center gap-2">
-                          <div class="font-medium truncate" title="{{ item.name }}">{{ item.name }}</div>
+                          <div class="font-medium overflow-hidden text-ellipsis whitespace-nowrap md:whitespace-normal md:text-clip md:overflow-visible" title="{{ item.name }}">{{ item.name }}</div>
                           {% if is_low %}
                             <span class="inline-flex items-center gap-1 text-[11px] leading-4 font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-200 border border-red-500/30">
                               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="m10.29 3.86-8 13.86A1.93 1.93 0 0 0 4 20h16a1.93 1.93 0 0 0 1.71-2.28l-8-13.86a2 2 0 0 0-3.42 0Z"/></svg>

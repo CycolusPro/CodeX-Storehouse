@@ -392,6 +392,7 @@ def create_app(
                 item.name.casefold(),
             ),
         )
+        low_stock_items = [item for item in items_sorted if _is_low_stock(item)]
         inventory_search = (request.args.get("inventory_search") or "").strip()
 
         if inventory_search:
@@ -409,6 +410,7 @@ def create_app(
             "total_quantity": total_quantity,
             "latest_in": latest_in,
             "latest_out": latest_out,
+            "low_stock_count": len(low_stock_items),
         }
         def _parse_positive_int(value: Optional[str], default: int) -> int:
             try:
@@ -496,11 +498,6 @@ def create_app(
             return url_for("index", **params)
 
         import_summary = _parse_import_summary(request)
-        low_stock_items = [
-            item
-            for item in items_sorted
-            if item.threshold is not None and item.quantity <= item.threshold
-        ]
         return render_template(
             "index.html",
             items=items,
