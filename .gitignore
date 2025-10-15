@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+inventory_app/__pycache__/
+*.json
+*.jsonl
+.DS_Store

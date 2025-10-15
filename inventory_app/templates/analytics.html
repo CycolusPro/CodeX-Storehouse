@@ -7,194 +7,280 @@
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #eef1f8;
+        --bg: #eef1f9;
         --fg: #111827;
         --muted: #6b7280;
-        --surface: rgba(255, 255, 255, 0.95);
-        --card: rgba(255,255,255,0.75);
+        --surface: rgba(255, 255, 255, 0.94);
+        --panel: rgba(255, 255, 255, 0.82);
         --border: rgba(148, 163, 184, 0.35);
-        --accent: #2563eb;
-        --accent-soft: rgba(37, 99, 235, 0.14);
-        --shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+        --border-strong: rgba(100, 116, 139, 0.45);
+        --accent: #4c6ef5;
+        --accent-soft: rgba(76, 110, 245, 0.12);
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --success: #10b981;
+        --shadow: 0 28px 60px rgba(15, 23, 42, 0.15);
+        --radius-lg: 24px;
+        --radius-md: 16px;
       }
       :root.dark {
-        --bg: #0b1220;
+        --bg: #050a18;
         --fg: #f8fafc;
         --muted: #94a3b8;
-        --surface: rgba(15, 23, 42, 0.88);
-        --card: rgba(15, 23, 42, 0.72);
-        --border: rgba(148, 163, 184, 0.22);
-        --shadow: 0 20px 40px rgba(2, 6, 23, 0.65);
+        --surface: rgba(12, 18, 36, 0.9);
+        --panel: rgba(12, 18, 36, 0.78);
+        --border: rgba(100, 116, 139, 0.22);
+        --border-strong: rgba(100, 116, 139, 0.35);
+        --shadow: 0 28px 60px rgba(2, 6, 23, 0.6);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
         font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 45%), var(--bg);
+        background: radial-gradient(circle at top left, rgba(76, 110, 245, 0.15), transparent 55%),
+                    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.08), transparent 60%),
+                    var(--bg);
         color: var(--fg);
       }
       a { color: inherit; text-decoration: none; }
-      header {
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+      }
+      .sidebar {
         position: sticky;
         top: 0;
-        z-index: 20;
-        backdrop-filter: blur(16px);
-        background: var(--surface);
-        border-bottom: 1px solid var(--border);
-      }
-      .topbar {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 18px 24px;
+        height: 100vh;
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 24px;
+        padding: 32px 28px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
       }
-      .brand {
+      .sidebar__brand {
         display: flex;
         align-items: center;
         gap: 12px;
         font-weight: 700;
         letter-spacing: -0.02em;
+        font-size: 20px;
       }
-      .brand svg { width: 20px; height: 20px; }
-      nav {
+      .sidebar__brand svg { width: 22px; height: 22px; }
+      .sidebar__section { display: grid; gap: 18px; }
+      label { display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
+      select,
+      input,
+      textarea {
+        font: inherit;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        padding: 10px 14px;
+      }
+      select:focus,
+      input:focus,
+      textarea:focus {
+        outline: 2px solid rgba(76, 110, 245, 0.35);
+        outline-offset: 2px;
+      }
+      .sidebar__nav { display: grid; gap: 8px; }
+      .nav-btn {
         display: flex;
-        gap: 12px;
         align-items: center;
-        flex-wrap: wrap;
-      }
-      .nav-link {
-        padding: 8px 14px;
-        border-radius: 999px;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        background: transparent;
         font-size: 14px;
         color: var(--muted);
-        border: 1px solid transparent;
+        transition: background 0.2s ease, border 0.2s ease, color 0.2s ease;
       }
-      .nav-link.active {
-        color: var(--fg);
-        border-color: var(--border);
+      .nav-btn.active {
         background: var(--accent-soft);
+        border-color: var(--border);
+        color: var(--fg);
       }
-      .topbar__right {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 16px;
+      .sidebar__footer {
+        margin-top: auto;
+        display: grid;
+        gap: 12px;
         font-size: 13px;
         color: var(--muted);
       }
-      .theme-toggle {
-        border: 1px solid var(--border);
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
+      .sidebar__footer form { margin: 0; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: 14px;
+        padding: 10px 16px;
+        border: 1px solid transparent;
         background: transparent;
-        display: grid;
-        place-items: center;
+        color: inherit;
+        font: inherit;
         cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
       }
-      main {
-        max-width: 1100px;
-        margin: 40px auto 80px;
-        padding: 0 24px 24px;
-        display: grid;
-        gap: 28px;
+      .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+      .btn--primary {
+        background: linear-gradient(135deg, #4c6ef5, #5b8ef9);
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(76, 110, 245, 0.25);
       }
-      .panel {
+      .btn--outline {
+        border-color: var(--border);
+        background: var(--panel);
+      }
+      .btn--ghost {
+        border-color: var(--border);
+        background: transparent;
+        color: var(--fg);
+      }
+      header.main-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(18px);
         background: var(--surface);
-        border-radius: 24px;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow);
-        padding: 28px;
-        display: grid;
-        gap: 20px;
+        border-bottom: 1px solid var(--border);
       }
-      .panel--compact {
-        padding: 24px;
+      .header-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 32px;
       }
-      h1 {
+      .page-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .page-title {
         margin: 0;
         font-size: clamp(24px, 3vw, 32px);
         letter-spacing: -0.03em;
       }
-      .subtitle {
-        color: var(--muted);
-        font-size: 14px;
+      .header-meta { color: var(--muted); font-size: 14px; }
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
       }
-      form.filters {
+      .theme-toggle {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-color: var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        overflow: hidden;
+      }
+      .theme-toggle__icon {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 20px;
+        height: 20px;
+        opacity: 0;
+        transform: scale(0.75) rotate(8deg);
+        transition: opacity 0.28s ease, transform 0.28s ease;
+      }
+      .theme-toggle__icon--sun {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .theme-toggle__icon--moon {
+        transform: scale(0.8) rotate(-10deg);
+      }
+      :root.dark .theme-toggle {
+        background: rgba(76, 110, 245, 0.16);
+        border-color: rgba(99, 102, 241, 0.4);
+        color: #f8fafc;
+      }
+      :root.dark .theme-toggle__icon--sun {
+        opacity: 0;
+        transform: scale(0.65) rotate(-12deg);
+      }
+      :root.dark .theme-toggle__icon--moon {
+        opacity: 1;
+        transform: scale(1);
+      }
+      main {
+        padding: 32px;
+        display: grid;
+        gap: 28px;
+      }
+      .panel {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 24px;
+        display: grid;
+        gap: 20px;
+      }
+      .panel--flush { padding: 0; }
+      .panel__header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .panel__header h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .panel__meta { color: var(--muted); font-size: 13px; }
+      .filters-grid {
         display: grid;
         gap: 16px;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        align-items: end;
       }
-      label {
-        display: grid;
-        gap: 8px;
-        font-size: 13px;
-        color: var(--muted);
-      }
-      select,
-      input[type="date"] {
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        background: var(--card);
-        color: var(--fg);
-        font: inherit;
-        padding: 10px 14px;
-      }
-      select:focus,
-      input[type="date"]:focus {
-        outline: 2px solid rgba(37, 99, 235, 0.35);
-        outline-offset: 2px;
-      }
-      .actions {
+      .filters-grid .actions {
         display: flex;
         gap: 12px;
         flex-wrap: wrap;
         align-items: center;
+        justify-content: flex-end;
+        grid-column: 1 / -1;
       }
-      .primary-btn,
-      .ghost-btn {
-        border-radius: 14px;
-        padding: 12px 18px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .primary-btn {
-        border: none;
-        background: linear-gradient(135deg, #2563eb, #3b82f6);
-        color: #fff;
-      }
-      .ghost-btn {
-        border: 1px solid var(--border);
-        background: transparent;
-        color: var(--fg);
-      }
-      .kpi-grid {
+      .summary-grid {
         display: grid;
-        gap: 16px;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
-      .kpi {
-        border-radius: 18px;
-        padding: 20px;
-        background: var(--card);
+      .summary-card {
+        border-radius: var(--radius-lg);
         border: 1px solid var(--border);
+        background: var(--surface);
+        padding: 24px;
+        box-shadow: var(--shadow);
         display: grid;
-        gap: 6px;
+        gap: 10px;
       }
-      .kpi small { color: var(--muted); }
+      .summary-card small { color: var(--muted); }
+      .summary-card strong { font-size: 28px; letter-spacing: -0.02em; }
+      .table-wrapper { overflow-x: auto; }
       table {
         width: 100%;
         border-collapse: collapse;
         font-size: 14px;
       }
-      thead {
-        background: rgba(148, 163, 184, 0.15);
-        color: var(--muted);
-      }
+      thead { background: rgba(148, 163, 184, 0.18); }
       th, td {
         text-align: left;
         padding: 12px 16px;
@@ -202,32 +288,35 @@
         white-space: nowrap;
       }
       tbody tr:last-child td { border-bottom: none; }
-      .table-meta {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .empty {
+      .empty-state {
         padding: 40px;
         text-align: center;
         color: var(--muted);
         font-size: 14px;
       }
-      @media (max-width: 768px) {
-        .topbar { flex-wrap: wrap; }
-        .topbar__right { width: 100%; justify-content: space-between; }
-        main { margin-top: 28px; }
-        table { display: block; overflow-x: auto; }
-        th, td { white-space: nowrap; }
+      @media (max-width: 960px) {
+        .app-shell { grid-template-columns: 1fr; }
+        .sidebar {
+          position: static;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+          box-shadow: none;
+          padding: 24px;
+        }
+        header.main-header { position: static; }
+        .header-inner { padding: 20px 24px; }
+        main { padding: 24px; }
+      }
+      @media (max-width: 640px) {
+        .header-actions { width: 100%; justify-content: flex-end; }
       }
     </style>
   </head>
   <body>
-    <header>
-      <div class="topbar">
-        <a href="{{ url_for('index') }}" class="brand" aria-label="返回库存总览">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7" rx="1" />
             <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -235,146 +324,191 @@
             <rect x="3" y="14" width="7" height="7" rx="1" />
           </svg>
           库存控制中心
-        </a>
-        <nav>
-          <a class="nav-link" href="{{ url_for('index') }}">库存总览</a>
-          {% if permissions.can_view_history %}
-            <a class="nav-link" href="{{ url_for('recent_activity') }}">最近动态</a>
+        </div>
+        <div class="sidebar__section">
+          <form method="post" action="{{ url_for('select_store') }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}" />
+            <label>
+              当前门店
+              <select name="store_id" onchange="this.form.submit()">
+                {% for store_id, store in stores.items() %}
+                  <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>
+                    {{ store.name }}{% if store.items_count %}（{{ store.items_count }}）{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+          </form>
+          {% if permissions.can_manage_stores %}
+            <a class="btn btn--outline" href="{{ url_for('index') }}#store-management">管理门店</a>
           {% endif %}
-          <span class="nav-link active">出入库统计</span>
+        </div>
+        <nav class="sidebar__nav">
+          <a class="nav-btn" href="{{ url_for('index') }}">库存总览</a>
+          {% if permissions.can_view_history %}
+            <a class="nav-btn" href="{{ url_for('recent_activity') }}">最近动态</a>
+            <span class="nav-btn active">出入库统计</span>
+          {% endif %}
           {% if permissions.can_manage_users %}
-            <a class="nav-link" href="{{ url_for('manage_users') }}">用户管理</a>
+            <a class="nav-btn" href="{{ url_for('manage_users') }}">用户管理</a>
           {% endif %}
         </nav>
-        <div class="topbar__right">
-          <span>{{ current_user.username }} · {{ role_labels.get(current_user.role, current_user.role) }}</span>
+        <div class="sidebar__footer">
+          <div>当前账号：<strong>{{ current_user.username }}</strong></div>
+          <div>角色：{{ role_labels.get(current_user.role, current_user.role) }}</div>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="ghost-btn" style="padding:8px 14px;">退出</button>
+            <button type="submit" class="btn btn--ghost" style="padding:8px 14px;">退出登录</button>
           </form>
-          <button data-theme-toggle class="theme-toggle" aria-label="切换主题">
-            <svg class="theme-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z" />
-            </svg>
-          </button>
         </div>
+      </aside>
+      <div class="main">
+        <header class="main-header">
+          <div class="header-inner">
+            <div class="page-heading">
+              <h1 class="page-title">出入库统计</h1>
+              <p class="header-meta">统计区间：{{ range_label }} · 当前门店：{{ selected_store_name }}</p>
+            </div>
+            <div class="header-actions">
+              <a href="{{ export_url }}" class="btn btn--outline">导出表格</a>
+              <button id="themeToggle" class="btn theme-toggle" type="button" aria-label="切换深浅色" aria-pressed="false">
+                <svg class="theme-toggle__icon theme-toggle__icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M17.99 17.99l1.79 1.79M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M17.99 6.01l1.79-1.79" />
+                </svg>
+                <svg class="theme-toggle__icon theme-toggle__icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 14.25A7.25 7.25 0 0110.75 4a6.25 6.25 0 000 12.5A7.25 7.25 0 0121 14.25z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </header>
+        <main>
+          <section class="panel">
+            <div class="panel__header">
+              <h2>筛选条件</h2>
+              <p class="panel__meta">根据门店与时间范围更新统计数据</p>
+            </div>
+            <form method="get" class="filters-grid">
+              <input type="hidden" name="mode" value="sku" />
+              <label>
+                门店
+                <select name="store">
+                  {% for store_id, store in stores.items() %}
+                    <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                起始日期
+                <input type="date" name="start" value="{{ start_value }}" />
+              </label>
+              <label>
+                截止日期
+                <input type="date" name="end" value="{{ end_value }}" />
+              </label>
+              <div class="actions">
+                <button type="submit" class="btn btn--primary">更新数据</button>
+              </div>
+            </form>
+          </section>
+          <section class="summary-grid">
+            <article class="summary-card">
+              <small>入库总量</small>
+              <strong style="color: var(--success);">{{ totals.inbound }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>出库总量</small>
+              <strong style="color: var(--warning);">{{ totals.outbound }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>净变动</small>
+              <strong style="color: var(--accent);">{{ totals.net }}</strong>
+            </article>
+            <article class="summary-card">
+              <small>截止库存</small>
+              <strong>{{ totals.ending_quantity }}</strong>
+            </article>
+          </section>
+          <section class="panel panel--flush">
+            <div class="panel__header" style="padding: 24px;">
+              <div>
+                <h2>数据明细</h2>
+                <p class="panel__meta">共 {{ stats_rows|length }} 条记录</p>
+              </div>
+            </div>
+            {% if has_data %}
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>SKU 名称</th>
+                      <th>分类</th>
+                      <th>单位</th>
+                      <th>入库数量</th>
+                      <th>出库数量</th>
+                      <th>净变动</th>
+                      <th>截止库存</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in stats_rows %}
+                      <tr>
+                        <td>{{ row.sku }}</td>
+                        <td>{{ row.category or '—' }}</td>
+                        <td>{{ row.unit or '—' }}</td>
+                        <td style="color: var(--success);">{{ row.inbound }}</td>
+                        <td style="color: var(--warning);">{{ row.outbound }}</td>
+                        <td style="color: var(--accent);">{{ row.net }}</td>
+                        <td>{{ row.ending_quantity if row.ending_quantity is not none else '—' }}</td>
+                      </tr>
+                    {% endfor %}
+                    <tr>
+                      <td>合计</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td style="color: var(--success);">{{ totals.inbound }}</td>
+                      <td style="color: var(--warning);">{{ totals.outbound }}</td>
+                      <td style="color: var(--accent);">{{ totals.net }}</td>
+                      <td>{{ totals.ending_quantity }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty-state">当前暂无数据，尝试调整统计时间范围。</div>
+            {% endif %}
+          </section>
+        </main>
       </div>
-    </header>
-    <main>
-      <section class="panel">
-        <div>
-          <h1>出入库统计</h1>
-          <div class="subtitle">统计区间：{{ range_label }} · 当前门店：{{ selected_store_name }}</div>
-        </div>
-        <form method="get" class="filters">
-          <input type="hidden" name="mode" value="sku" />
-          <label>
-            门店
-            <select name="store">
-              {% for store_id, store in stores.items() %}
-                <option value="{{ store_id }}" {% if store_id == selected_store %}selected{% endif %}>{{ store.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            起始日期
-            <input type="date" name="start" value="{{ start_value }}" />
-          </label>
-          <label>
-            截止日期
-            <input type="date" name="end" value="{{ end_value }}" />
-          </label>
-          <div class="actions">
-            <button type="submit" class="primary-btn">更新数据</button>
-            <a href="{{ export_url }}" class="ghost-btn">导出表格</a>
-          </div>
-        </form>
-      </section>
-      <section class="kpi-grid">
-        <article class="kpi">
-          <small>入库总量</small>
-          <strong style="font-size: 24px; color: #059669;">{{ totals.inbound }}</strong>
-        </article>
-        <article class="kpi">
-          <small>出库总量</small>
-          <strong style="font-size: 24px; color: #d97706;">{{ totals.outbound }}</strong>
-        </article>
-        <article class="kpi">
-          <small>净变动</small>
-          <strong style="font-size: 24px; color: var(--accent);">{{ totals.net }}</strong>
-        </article>
-        <article class="kpi">
-          <small>截止库存</small>
-          <strong style="font-size: 24px;">{{ totals.ending_quantity }}</strong>
-        </article>
-      </section>
-      <section class="panel panel--compact">
-        <div class="table-meta">
-          <h2 style="margin:0;font-size:18px;letter-spacing:-0.02em;">数据明细</h2>
-          <span>共 {{ stats_rows|length }} 条</span>
-        </div>
-        {% if has_data %}
-          <div style="overflow-x:auto;">
-            <table>
-              <thead>
-                <tr>
-                  <th>SKU 名称</th>
-                  <th>分类</th>
-                  <th>单位</th>
-                  <th>入库数量</th>
-                  <th>出库数量</th>
-                  <th>净变动</th>
-                  <th>截止库存</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in stats_rows %}
-                  <tr>
-                    <td>{{ row.sku }}</td>
-                    <td>{{ row.category or '—' }}</td>
-                    <td>{{ row.unit or '—' }}</td>
-                    <td style="color:#059669;">{{ row.inbound }}</td>
-                    <td style="color:#d97706;">{{ row.outbound }}</td>
-                    <td style="color:var(--accent);">{{ row.net }}</td>
-                    <td>{{ row.ending_quantity if row.ending_quantity is not none else '—' }}</td>
-                  </tr>
-                {% endfor %}
-                <tr>
-                  <td>合计</td>
-                  <td>—</td>
-                  <td>—</td>
-                  <td style="color:#059669;">{{ totals.inbound }}</td>
-                  <td style="color:#d97706;">{{ totals.outbound }}</td>
-                  <td style="color:var(--accent);">{{ totals.net }}</td>
-                  <td>{{ totals.ending_quantity }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <div class="empty">当前暂无数据，尝试调整统计时间范围。</div>
-        {% endif %}
-      </section>
-    </main>
+    </div>
     <script>
       const root = document.documentElement;
+      const themeToggleBtn = document.getElementById('themeToggle');
       const getTheme = () => localStorage.getItem('theme');
       const setTheme = t => localStorage.setItem('theme', t);
-      const applyTheme = t => root.classList.toggle('dark', t === 'dark');
+      const syncThemeToggle = theme => {
+        if (!themeToggleBtn) return;
+        themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        themeToggleBtn.dataset.theme = theme;
+      };
+      const applyTheme = theme => {
+        root.classList.toggle('dark', theme === 'dark');
+        syncThemeToggle(theme);
+      };
       const initTheme = () => {
-        const t = getTheme();
-        if (t) {
-          applyTheme(t);
+        const storedTheme = getTheme();
+        if (storedTheme) {
+          applyTheme(storedTheme);
         } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           applyTheme('dark');
         }
       };
       initTheme();
-      document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const next = root.classList.contains('dark') ? 'light' : 'dark';
-          applyTheme(next);
-          setTheme(next);
-        });
+      syncThemeToggle(root.classList.contains('dark') ? 'dark' : 'light');
+      themeToggleBtn?.addEventListener('click', () => {
+        const nextTheme = root.classList.contains('dark') ? 'light' : 'dark';
+        applyTheme(nextTheme);
+        setTheme(nextTheme);
       });
     </script>
   </body>
