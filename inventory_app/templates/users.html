@@ -1,147 +1,347 @@
 <!doctype html>
-<html lang="zh" data-theme="light">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>用户管理 · 库存控制中心</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: ['class'],
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['ui-sans-serif','-apple-system','BlinkMacSystemFont','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft Yahei','Helvetica Neue','Arial','Noto Sans CJK SC','sans-serif']
-            },
-            colors: {
-              brand: {
-                50: '#F4F6FF',
-                100: '#E9EDFF',
-                200: '#C7D0FF',
-                300: '#A4B4FF',
-                400: '#8097FF',
-                500: '#5D7BFF',
-                600: '#3A5EFF',
-                700: '#2447E6',
-                800: '#1B34B0',
-                900: '#14257F'
-              }
-            },
-            boxShadow: {
-              xlsoft: '0 25px 80px rgba(15, 23, 42, .16)'
-            }
-          }
-        }
-      }
-    </script>
     <style>
-      :root { color-scheme: light dark; }
+      :root {
+        color-scheme: light dark;
+        --bg: #f3f5fb;
+        --fg: #1f2937;
+        --muted: #6b7280;
+        --surface: rgba(255, 255, 255, 0.92);
+        --card: rgba(255,255,255,0.8);
+        --border: rgba(148, 163, 184, 0.35);
+        --accent: #6366f1;
+        --shadow: 0 24px 45px rgba(15, 23, 42, 0.15);
+      }
+      :root.dark {
+        --bg: #0b1220;
+        --fg: #f1f5f9;
+        --muted: #94a3b8;
+        --surface: rgba(15, 23, 42, 0.9);
+        --card: rgba(15, 23, 42, 0.75);
+        --border: rgba(148, 163, 184, 0.22);
+        --shadow: 0 24px 45px rgba(2, 6, 23, 0.6);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 50%), var(--bg);
+        color: var(--fg);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        backdrop-filter: blur(16px);
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .topbar {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .brand svg { width: 20px; height: 20px; }
+      nav { display: flex; gap: 12px; flex-wrap: wrap; }
+      .nav-link {
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 14px;
+        color: var(--muted);
+        border: 1px solid transparent;
+        text-decoration: none;
+      }
+      .nav-link.active {
+        color: var(--fg);
+        border-color: var(--border);
+        background: rgba(99, 102, 241, 0.14);
+      }
+      .topbar__right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .ghost-btn {
+        padding: 8px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .theme-toggle {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: transparent;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      main {
+        max-width: 1100px;
+        margin: 32px auto 80px;
+        padding: 0 24px 24px;
+        display: grid;
+        gap: 28px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(26px, 3vw, 32px);
+        letter-spacing: -0.02em;
+      }
+      .lead { color: var(--muted); font-size: 14px; }
+      .grid {
+        display: grid;
+        gap: 24px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      .card {
+        background: var(--surface);
+        border-radius: 24px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        padding: 28px;
+        display: grid;
+        gap: 20px;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      input,
+      select {
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 12px 16px;
+        font: inherit;
+        color: var(--fg);
+      }
+      input:focus,
+      select:focus {
+        outline: 2px solid rgba(99, 102, 241, 0.35);
+        outline-offset: 2px;
+      }
+      .primary-btn {
+        border-radius: 14px;
+        border: none;
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        color: #fff;
+        padding: 12px 20px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 18px 35px rgba(99, 102, 241, 0.3);
+      }
+      .list {
+        display: grid;
+        gap: 16px;
+      }
+      .user-card {
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 18px;
+        display: grid;
+        gap: 14px;
+      }
+      .user-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .inline-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .outline-btn {
+        padding: 10px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .danger {
+        border-color: rgba(248, 113, 113, 0.35);
+        color: #dc2626;
+      }
+      :root.dark .danger { color: #fca5a5; }
+      .danger:hover { background: rgba(248, 113, 113, 0.12); }
+      form { display: grid; gap: 16px; }
+      .flash {
+        padding: 14px 18px;
+        border-radius: 16px;
+        font-size: 14px;
+      }
+      .flash.success {
+        background: rgba(34,197,94,0.15);
+        border: 1px solid rgba(34,197,94,0.35);
+        color: #15803d;
+      }
+      .flash.error {
+        background: rgba(248,113,113,0.15);
+        border: 1px solid rgba(248,113,113,0.35);
+        color: #b91c1c;
+      }
+      :root.dark .flash.success {
+        background: rgba(34,197,94,0.12);
+        border-color: rgba(34,197,94,0.25);
+        color: #4ade80;
+      }
+      :root.dark .flash.error {
+        background: rgba(248,113,113,0.12);
+        border-color: rgba(248,113,113,0.25);
+        color: #fca5a5;
+      }
+      @media (max-width: 768px) {
+        .topbar { flex-wrap: wrap; }
+        .topbar__right { width: 100%; justify-content: space-between; }
+      }
     </style>
   </head>
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
-    <header class="sticky top-0 z-30 border-b border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/70 backdrop-blur">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <a href="{{ url_for('index') }}" class="flex items-center gap-2 font-semibold">
-          <svg class="w-5 h-5 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/><path d="M8 6H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+  <body>
+    <header>
+      <div class="topbar">
+        <a href="{{ url_for('index') }}" class="brand" aria-label="返回库存控制中心">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+            <path d="M8 6H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+          </svg>
           返回控制中心
         </a>
-        <div class="flex items-center gap-3 text-sm">
-          <span class="text-slate-500 dark:text-slate-300">当前账号：<strong>{{ current_user.username }}</strong> · {{ role_labels.get(current_user.role, current_user.role) }}</span>
+        <nav>
+          <a class="nav-link" href="{{ url_for('index') }}">库存总览</a>
+          {% if permissions.can_view_history %}
+            <a class="nav-link" href="{{ url_for('analytics_dashboard') }}">出入库统计</a>
+          {% endif %}
+          <span class="nav-link active">用户管理</span>
+        </nav>
+        <div class="topbar__right">
+          <span>当前账号：<strong>{{ current_user.username }}</strong> · {{ role_labels.get(current_user.role, current_user.role) }}</span>
           <form method="post" action="{{ url_for('logout') }}">
-            <button type="submit" class="px-3 py-1 rounded-lg border border-slate-200/60 dark:border-white/10 hover:bg-slate-100/70 dark:hover:bg-white/5">退出</button>
+            <button type="submit" class="ghost-btn">退出</button>
           </form>
+          <button data-theme-toggle class="theme-toggle" aria-label="切换主题">
+            <svg class="theme-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z" />
+            </svg>
+          </button>
         </div>
       </div>
     </header>
-
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <main>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">用户管理</h1>
-        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">在此新增或维护可访问库存系统的账号。</p>
+        <h1>用户管理</h1>
+        <p class="lead">维护能够登录系统的账号，为不同角色配置权限。</p>
       </div>
-
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <div class="space-y-2">
+          <div class="card" style="padding:18px; gap:12px;">
             {% for category, message in messages %}
-              <div class="px-4 py-3 rounded-xl border text-sm {% if category == 'success' %}border-emerald-300/50 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-200{% else %}border-red-300/50 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-200{% endif %}">
-                {{ message }}
-              </div>
+              <div class="flash {% if category == 'success' %}success{% else %}error{% endif %}">{{ message }}</div>
             {% endfor %}
           </div>
         {% endif %}
       {% endwith %}
-
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <form method="post" action="{{ url_for('create_user_route') }}" class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 p-6 shadow-xlsoft space-y-5">
+      <div class="grid">
+        <section class="card">
           <div>
-            <h2 class="text-lg font-semibold">新增用户</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">创建新的登录账号并设置角色权限。</p>
+            <h2 style="margin:0;font-size:20px;letter-spacing:-0.02em;">新增用户</h2>
+            <p class="lead" style="margin-top:6px;">创建新的登录账号并设置角色权限。</p>
           </div>
-          <label class="block text-sm">
-            <span class="text-slate-500">用户名</span>
-            <input name="username" required minlength="3" class="mt-1 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" placeholder="至少 3 个字符" />
-          </label>
-          <label class="block text-sm">
-            <span class="text-slate-500">密码</span>
-            <input name="password" type="password" required class="mt-1 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" placeholder="请输入初始密码" />
-          </label>
-          <label class="block text-sm">
-            <span class="text-slate-500">角色</span>
-            <select name="role" class="mt-1 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
-              <option value="staff">普通员工</option>
-              <option value="admin">管理员</option>
-              <option value="super_admin">超级管理员</option>
-            </select>
-          </label>
-          <div class="flex justify-end">
-            <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:brightness-105">创建账号</button>
+          <form method="post" action="{{ url_for('create_user_route') }}">
+            <label>
+              用户名
+              <input name="username" required minlength="3" placeholder="至少 3 个字符" />
+            </label>
+            <label>
+              密码
+              <input name="password" type="password" required placeholder="请输入初始密码" />
+            </label>
+            <label>
+              角色
+              <select name="role">
+                <option value="staff">普通员工</option>
+                <option value="admin">管理员</option>
+                <option value="super_admin">超级管理员</option>
+              </select>
+            </label>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="submit" class="primary-btn">创建账号</button>
+            </div>
+          </form>
+        </section>
+        <section class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2 style="margin:0;font-size:20px;letter-spacing:-0.02em;">现有用户</h2>
+            <span class="lead">共 {{ users|length }} 个</span>
           </div>
-        </form>
-
-        <section class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 p-6 shadow-xlsoft">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">现有用户</h2>
-            <span class="text-xs text-slate-400">共 {{ users|length }} 个</span>
-          </div>
-          <div class="mt-4 space-y-4">
+          <div class="list">
             {% for user in users %}
-              <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 space-y-3">
-                <form method="post" action="{{ url_for('update_user_route', username=user.username) }}" class="grid gap-3 md:grid-cols-5 items-end">
-                  <label class="text-sm md:col-span-2">
-                    <span class="text-slate-500">用户名</span>
-                    <input name="username" value="{{ user.username }}" required minlength="3" class="mt-1 w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" />
+              <article class="user-card">
+                <form method="post" action="{{ url_for('update_user_route', username=user.username) }}">
+                  <label>
+                    用户名
+                    <input name="username" value="{{ user.username }}" required minlength="3" />
                   </label>
-                  <label class="text-sm md:col-span-2">
-                    <span class="text-slate-500">新密码 <span class="text-xs text-slate-400">（留空表示不修改）</span></span>
-                    <input name="password" type="password" class="mt-1 w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2" />
+                  <label>
+                    新密码 <span style="font-size:12px; color:var(--muted);">（留空表示不修改）</span>
+                    <input name="password" type="password" />
                   </label>
-                  <label class="text-sm">
-                    <span class="text-slate-500">角色</span>
-                    <select name="role" class="mt-1 w-full rounded-lg border border-slate-200/60 dark:border-white/10 bg-slate-100/70 dark:bg-white/5 px-3 py-2">
+                  <label>
+                    角色
+                    <select name="role">
                       <option value="staff" {% if user.role == 'staff' %}selected{% endif %}>普通员工</option>
                       <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>管理员</option>
                       <option value="super_admin" {% if user.role == 'super_admin' %}selected{% endif %}>超级管理员</option>
                     </select>
                   </label>
-                  <div class="md:col-span-5 flex flex-wrap gap-2 justify-end">
-                    <button type="submit" class="px-3 py-2 rounded-lg border border-brand-600/30 text-brand-700 dark:text-brand-300 hover:bg-brand-600/10">保存</button>
+                  <div class="inline-actions">
+                    <button type="submit" class="outline-btn">保存修改</button>
                   </div>
                 </form>
-                <form method="post" action="{{ url_for('delete_user_route', username=user.username) }}" class="flex justify-end">
-                  <button type="submit" class="px-3 py-2 rounded-lg border border-red-500/30 text-red-600 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed" {% if current_user.username == user.username %}disabled{% endif %}>删除</button>
+                <form method="post" action="{{ url_for('delete_user_route', username=user.username) }}" class="inline-actions">
+                  <button type="submit" class="outline-btn danger" {% if current_user.username == user.username %}disabled{% endif %}>删除账号</button>
+                  {% if current_user.username == user.username %}
+                    <span style="font-size:12px; color:var(--muted);">不能删除当前登录账号</span>
+                  {% endif %}
                 </form>
-                <div class="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
+                <div class="user-meta">
                   <span>创建时间：{{ user.created_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
                   <span>最近更新：{{ user.updated_at|format_datetime('%Y-%m-%d %H:%M') }}</span>
                 </div>
-              </div>
+              </article>
             {% endfor %}
           </div>
         </section>
-      </section>
+      </div>
     </main>
-
     <script>
       const root = document.documentElement;
       const stored = localStorage.getItem('theme');
@@ -150,6 +350,13 @@
       } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         root.classList.add('dark');
       }
+      document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const next = root.classList.contains('dark') ? 'light' : 'dark';
+          root.classList.toggle('dark', next === 'dark');
+          localStorage.setItem('theme', next);
+        });
+      });
     </script>
   </body>
 </html>
