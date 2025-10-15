@@ -425,17 +425,92 @@
       }
       .pagination form { display: flex; align-items: center; gap: 6px; }
       .pagination select { padding: 8px 12px; }
+      .timeline-controls {
+        display: grid;
+        gap: 16px;
+      }
+      .timeline-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .timeline-actions form {
+        margin: 0;
+      }
+      .timeline-filters {
+        display: grid;
+        gap: 12px;
+      }
+      .timeline-filters form {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+      }
+      .timeline-filters label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        width: 100%;
+      }
+      .timeline-filters select {
+        flex: 1 1 160px;
+        min-width: 0;
+        padding: 8px 12px;
+      }
+      .timeline-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .timeline-pagination__buttons {
+        display: flex;
+        gap: 8px;
+      }
       .timeline-list {
         display: grid;
         gap: 16px;
       }
       .timeline-item {
         display: grid;
-        gap: 6px;
-        padding: 16px;
+        gap: 12px;
+        padding: 18px;
         border-radius: 16px;
         border: 1px solid var(--border);
         background: var(--panel);
+      }
+      .timeline-item__marker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .timeline-item__content {
+        display: grid;
+        gap: 8px;
+      }
+      .timeline-item__title {
+        font-weight: 600;
+      }
+      .timeline-item__meta {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .timeline-item__details {
+        font-size: 13px;
+        color: inherit;
+      }
+      .timeline-item__list {
+        margin: 0;
+        padding-left: 18px;
       }
       .timeline-badge {
         font-size: 12px;
@@ -445,11 +520,39 @@
         padding: 4px 8px;
         border-radius: 10px;
       }
+      .timeline-item__time {
+        font-size: 12px;
+        color: var(--muted);
+      }
       .timeline-badge.success { background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16,185,129,0.28); }
       .timeline-badge.danger { background: rgba(239, 68, 68, 0.12); color: #b91c1c; border: 1px solid rgba(239,68,68,0.28); }
       .timeline-badge.neutral { background: rgba(148, 163, 184, 0.12); color: var(--muted); border: 1px solid rgba(148,163,184,0.3); }
       :root.dark .timeline-badge.success { color: #34d399; }
       :root.dark .timeline-badge.danger { color: #fca5a5; }
+      @media (min-width: 720px) {
+        .timeline-controls {
+          gap: 20px;
+        }
+        .timeline-filters {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 16px;
+        }
+        .timeline-filters form {
+          flex: 0 1 220px;
+        }
+      }
+      @media (min-width: 640px) {
+        .timeline-item {
+          grid-template-columns: auto 1fr;
+          align-items: flex-start;
+        }
+        .timeline-item__marker {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
       .alert-stack {
         border-radius: var(--radius-lg);
         border: 1px solid rgba(239, 68, 68, 0.35);
@@ -836,76 +939,83 @@
                   <h2>最近动态</h2>
                   <div class="panel__meta">共 {{ timeline_pagination.total }} 条</div>
                 </div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                  <a class="btn btn--outline" href="/api/history/export">导出记录</a>
-                  {% if permissions.can_clear_history %}
-                    <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
-                      <button type="submit" class="btn btn--danger">清除记录</button>
+                <div class="timeline-controls">
+                  <div class="timeline-actions">
+                    <a class="btn btn--outline" href="/api/history/export">导出记录</a>
+                    {% if permissions.can_clear_history %}
+                      <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确认清除全部最近动态记录？');">
+                        <button type="submit" class="btn btn--danger">清除记录</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  <div class="timeline-filters">
+                    <form method="get" action="{{ url_for('index') }}">
+                      {% for key, values in preserved_query.items() %}
+                        {% if key not in ['timeline_sku', 'timeline_page'] %}
+                          {% for value in values %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                          {% endfor %}
+                        {% endif %}
+                      {% endfor %}
+                      <input type="hidden" name="timeline_page" value="1" />
+                      <label>筛选 SKU
+                        <select name="timeline_sku" onchange="this.form.submit()">
+                          <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
+                          {% for name in timeline_sku_options %}
+                            <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
                     </form>
-                  {% endif %}
-                </div>
-                <div class="pagination">
-                  <form method="get" action="{{ url_for('index') }}">
-                    {% for key, values in preserved_query.items() %}
-                      {% if key not in ['timeline_sku', 'timeline_page'] %}
-                        {% for value in values %}
-                          <input type="hidden" name="{{ key }}" value="{{ value }}" />
-                        {% endfor %}
-                      {% endif %}
-                    {% endfor %}
-                    <input type="hidden" name="timeline_page" value="1" />
-                    <label>筛选 SKU
-                      <select name="timeline_sku" onchange="this.form.submit()">
-                        <option value="" {% if not timeline_sku %}selected{% endif %}>全部</option>
-                        {% for name in timeline_sku_options %}
-                          <option value="{{ name }}" {% if timeline_sku == name %}selected{% endif %}>{{ name }}</option>
-                        {% endfor %}
-                      </select>
-                    </label>
-                  </form>
-                  <form method="get" action="{{ url_for('index') }}">
-                    {% for key, values in preserved_query.items() %}
-                      {% if key not in ['timeline_per_page', 'timeline_page'] %}
-                        {% for value in values %}
-                          <input type="hidden" name="{{ key }}" value="{{ value }}" />
-                        {% endfor %}
-                      {% endif %}
-                    {% endfor %}
-                    <input type="hidden" name="timeline_page" value="1" />
-                    <label>每页
-                      <select name="timeline_per_page" onchange="this.form.submit()">
-                        {% for option in [5, 10, 20, 50] %}
-                          <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
-                        {% endfor %}
-                      </select>
-                    </label>
-                  </form>
-                </div>
-                <div class="pagination">
-                  <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
-                  <div style="display:flex; gap:8px;">
-                    <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
-                    <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                    <form method="get" action="{{ url_for('index') }}">
+                      {% for key, values in preserved_query.items() %}
+                        {% if key not in ['timeline_per_page', 'timeline_page'] %}
+                          {% for value in values %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}" />
+                          {% endfor %}
+                        {% endif %}
+                      {% endfor %}
+                      <input type="hidden" name="timeline_page" value="1" />
+                      <label>每页
+                        <select name="timeline_per_page" onchange="this.form.submit()">
+                          {% for option in [5, 10, 20, 50] %}
+                            <option value="{{ option }}" {% if timeline_pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                    </form>
+                  </div>
+                  <div class="timeline-pagination">
+                    <span>第 {{ timeline_pagination.start_index or 0 }}-{{ timeline_pagination.end_index or 0 }} / {{ timeline_pagination.total }} 条</span>
+                    <div class="timeline-pagination__buttons">
+                      <a href="{{ timeline_pagination.has_prev and build_query(timeline_page=timeline_pagination.prev_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_prev %}pointer-events:none; opacity:0.4;{% endif %}">上一页</a>
+                      <a href="{{ timeline_pagination.has_next and build_query(timeline_page=timeline_pagination.next_page) or '#' }}" class="btn btn--outline" style="padding:8px 12px; {% if not timeline_pagination.has_next %}pointer-events:none; opacity:0.4;{% endif %}">下一页</a>
+                    </div>
                   </div>
                 </div>
                 <div class="timeline-list">
                   {% if timeline %}
                     {% for event in timeline %}
                       <article class="timeline-item">
-                        <span class="timeline-badge {% if event.badge == 'success' %}success{% elif event.badge == 'danger' %}danger{% else %}neutral{% endif %}">{{ event.type }}</span>
-                        <div style="font-weight:600;">{{ event.name }}</div>
-                        <div class="panel__meta">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }} · 操作人：{{ event.user }}</div>
-                        {% if event.details %}
-                          {% if event.details is string %}
-                            <div class="panel__meta" style="color:inherit;">{{ event.details }}</div>
-                          {% else %}
-                            <ul class="panel__meta" style="color:inherit; padding-left:18px;">
-                              {% for detail in event.details %}
-                                <li>{{ detail }}</li>
-                              {% endfor %}
-                            </ul>
+                        <div class="timeline-item__marker">
+                          <span class="timeline-badge {% if event.badge == 'success' %}success{% elif event.badge == 'danger' %}danger{% else %}neutral{% endif %}">{{ event.type }}</span>
+                          <time class="timeline-item__time" datetime="{{ event.timestamp.isoformat() if event.timestamp is not none else '' }}">{{ event.timestamp|format_datetime('%Y-%m-%d %H:%M') }}</time>
+                        </div>
+                        <div class="timeline-item__content">
+                          <div class="timeline-item__title">{{ event.name }}</div>
+                          <div class="timeline-item__meta">操作人：{{ event.user }}</div>
+                          {% if event.details %}
+                            {% if event.details is string %}
+                              <div class="timeline-item__details">{{ event.details }}</div>
+                            {% else %}
+                              <ul class="timeline-item__details timeline-item__list">
+                                {% for detail in event.details %}
+                                  <li>{{ detail }}</li>
+                                {% endfor %}
+                              </ul>
+                            {% endif %}
                           {% endif %}
-                        {% endif %}
+                        </div>
                       </article>
                     {% endfor %}
                   {% else %}
