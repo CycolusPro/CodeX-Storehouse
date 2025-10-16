@@ -400,6 +400,61 @@
         font-size: 12px;
         color: var(--muted);
       }
+      .log-table__scroll {
+        overflow-x: auto;
+      }
+      .log-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 720px;
+      }
+      .log-table thead {
+        background: rgba(148, 163, 184, 0.12);
+      }
+      .log-table th,
+      .log-table td {
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .log-table tbody tr:hover {
+        background: rgba(76, 110, 245, 0.08);
+      }
+      .log-table__pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(76, 110, 245, 0.25);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .log-table__device {
+        display: grid;
+        gap: 2px;
+      }
+      .log-table__device-main {
+        font-weight: 600;
+      }
+      .log-table__device-sub {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .log-table__ua {
+        max-width: 320px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--muted);
+      }
+      .log-table__ip {
+        font-family: "Fira Code", "JetBrains Mono", monospace;
+        font-size: 12px;
+      }
       .alert-stack { display: grid; gap: 12px; }
       .alert {
         border-radius: var(--radius-md);
@@ -623,6 +678,53 @@
               </div>
             {% else %}
               <div class="empty-state">目前尚无用户，请先创建一个账号。</div>
+            {% endif %}
+          </section>
+          <section class="panel">
+            <div class="panel__header">
+              <div>
+                <h2>登录日志</h2>
+                <p class="panel__meta">覆盖 {{ login_records|length }} 条记录 · {{ login_user_count }} 位用户</p>
+              </div>
+            </div>
+            {% if login_records %}
+              <div class="log-table__scroll">
+                <table class="log-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 60px;">序号</th>
+                      <th>用户名</th>
+                      <th>登录时间</th>
+                      <th>客户端类型</th>
+                      <th>设备信息</th>
+                      <th>来源 IP</th>
+                      <th>浏览器标识</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for record in login_records %}
+                      <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ record.username }}</td>
+                        <td>{{ record.timestamp|format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                          <span class="log-table__pill">{{ record.client_type or '未知' }}</span>
+                        </td>
+                        <td>
+                          <div class="log-table__device">
+                            <span class="log-table__device-main">{{ record.platform or '未知平台' }}</span>
+                            <span class="log-table__device-sub">{{ record.browser or '未知浏览器' }}</span>
+                          </div>
+                        </td>
+                        <td class="log-table__ip">{{ record.ip_address or '—' }}</td>
+                        <td class="log-table__ua" title="{{ record.user_agent }}">{{ record.user_agent or '—' }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty-state">暂无登录记录，登录成功后将在此处展示。</div>
             {% endif %}
           </section>
         </main>

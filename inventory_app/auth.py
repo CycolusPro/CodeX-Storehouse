@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -80,15 +80,62 @@ class User:
         )
 
 
+@dataclass
+class LoginRecord:
+    """Represents a single login attempt that succeeded."""
+
+    username: str
+    timestamp: datetime
+    ip_address: str
+    user_agent: str
+    client_type: str
+    platform: str
+    browser: str
+
+    def to_record(self) -> Dict[str, str]:
+        return {
+            "username": self.username,
+            "timestamp": _serialize_timestamp(self.timestamp),
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "client_type": self.client_type,
+            "platform": self.platform,
+            "browser": self.browser,
+        }
+
+    @classmethod
+    def from_record(cls, record: Dict[str, str]) -> "LoginRecord":
+        timestamp = _parse_timestamp(record.get("timestamp")) or _now()
+        return cls(
+            username=str(record.get("username") or ""),
+            timestamp=timestamp,
+            ip_address=str(record.get("ip_address") or ""),
+            user_agent=str(record.get("user_agent") or ""),
+            client_type=str(record.get("client_type") or "未知"),
+            platform=str(record.get("platform") or ""),
+            browser=str(record.get("browser") or ""),
+        )
+
+
 class UserManager:
     """Manages user records stored in a JSON document."""
 
-    def __init__(self, storage_path: Path) -> None:
+    _MAX_LOGIN_RECORDS = 500
+
+    def __init__(self, storage_path: Path, *, login_log_path: Optional[Path] = None) -> None:
         self.storage_path = Path(storage_path)
+        self.login_log_path = (
+            Path(login_log_path)
+            if login_log_path is not None
+            else self.storage_path.with_name("login_logs.json")
+        )
         self._lock = RLock()
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self.login_log_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.storage_path.exists():
             self._write_data({})
+        if not self.login_log_path.exists():
+            self._write_login_data([])
         self._ensure_super_admin()
 
     # public API ---------------------------------------------------------
@@ -190,6 +237,43 @@ class UserManager:
             self._enforce_super_admin_presence(data)
             self._write_data(data)
 
+    # login records -----------------------------------------------------
+    def list_login_records(self, limit: Optional[int] = None) -> List[LoginRecord]:
+        records_raw = self._read_login_data()
+        records = [LoginRecord.from_record(entry) for entry in records_raw]
+        records.sort(key=lambda entry: entry.timestamp, reverse=True)
+        if limit is not None:
+            return records[:limit]
+        return records
+
+    def record_login(
+        self,
+        username: str,
+        *,
+        ip_address: str = "",
+        user_agent: str = "",
+        client_type: Optional[str] = None,
+        platform: Optional[str] = None,
+        browser: Optional[str] = None,
+    ) -> LoginRecord:
+        client_meta = self._analyze_user_agent(user_agent)
+        record = LoginRecord(
+            username=username,
+            timestamp=_now(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            client_type=client_type or client_meta["client_type"],
+            platform=platform or client_meta["platform"],
+            browser=browser or client_meta["browser"],
+        )
+        with self._lock:
+            existing = self._read_login_data()
+            existing.append(record.to_record())
+            if len(existing) > self._MAX_LOGIN_RECORDS:
+                existing = existing[-self._MAX_LOGIN_RECORDS :]
+            self._write_login_data(existing)
+        return record
+
     # helpers ------------------------------------------------------------
     def _read_data(self) -> Dict[str, Dict[str, str]]:
         if not self.storage_path.exists():
@@ -213,6 +297,29 @@ class UserManager:
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temp_path.replace(self.storage_path)
+
+    def _read_login_data(self) -> List[Dict[str, str]]:
+        if not self.login_log_path.exists():
+            return []
+        raw = self.login_log_path.read_text(encoding="utf-8") or "[]"
+        try:
+            import json
+
+            loaded = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(loaded, list):
+            return []
+        return [entry for entry in loaded if isinstance(entry, dict)]
+
+    def _write_login_data(self, entries: List[Dict[str, str]]) -> None:
+        import json
+
+        temp_path = self.login_log_path.with_suffix(".tmp")
+        temp_path.write_text(
+            json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temp_path.replace(self.login_log_path)
 
     def _ensure_super_admin(self) -> None:
         with self._lock:
@@ -274,3 +381,51 @@ class UserManager:
     def _validate_role(role: str) -> None:
         if role not in _VALID_ROLES:
             raise ValueError("无效的角色类型")
+
+    @staticmethod
+    def _analyze_user_agent(user_agent: str) -> Dict[str, str]:
+        ua_lower = user_agent.lower()
+        client_type = "未知"
+        if ua_lower:
+            tablet_indicators = ["tablet", "ipad"]
+            mobile_indicators = ["iphone", "android", "mobile", "micromessenger"]
+            if any(indicator in ua_lower for indicator in tablet_indicators):
+                client_type = "平板端"
+            elif any(indicator in ua_lower for indicator in mobile_indicators):
+                client_type = "移动端"
+            else:
+                client_type = "桌面端"
+
+        platform = ""
+        platform_mappings = {
+            "windows nt": "Windows",
+            "mac os x": "macOS",
+            "iphone": "iOS",
+            "ipad": "iPadOS",
+            "android": "Android",
+            "linux": "Linux",
+        }
+        for signature, label in platform_mappings.items():
+            if signature in ua_lower:
+                platform = label
+                break
+
+        browser = ""
+        browser_mappings = {
+            "edg": "Microsoft Edge",
+            "chrome": "Chrome",
+            "safari": "Safari",
+            "firefox": "Firefox",
+            "msie": "Internet Explorer",
+            "trident": "Internet Explorer",
+        }
+        for signature, label in browser_mappings.items():
+            if signature in ua_lower:
+                browser = label
+                break
+
+        return {
+            "client_type": client_type,
+            "platform": platform,
+            "browser": browser,
+        }
