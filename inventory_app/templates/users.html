@@ -202,7 +202,7 @@
       .btn--ghost {
         border-color: var(--border);
         background: transparent;
-        color: var(--fg);
+        color: var(--muted);
       }
       .btn--danger {
         border-color: rgba(239, 68, 68, 0.4);
@@ -307,6 +307,11 @@
         justify-content: space-between;
         gap: 12px;
       }
+      .panel__actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
       .panel__header h2 {
         margin: 0;
         font-size: 20px;
@@ -399,6 +404,121 @@
         gap: 12px;
         font-size: 12px;
         color: var(--muted);
+      }
+      .log-table__scroll {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 420px;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+      .log-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 960px;
+      }
+      .log-table thead {
+        background: rgba(148, 163, 184, 0.12);
+      }
+      .log-table th,
+      .log-table td {
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .log-table tbody tr:hover {
+        background: rgba(76, 110, 245, 0.08);
+      }
+      .log-table__pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(76, 110, 245, 0.25);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .log-table__event {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(148, 163, 184, 0.18);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .log-table__event--login {
+        background: rgba(34, 197, 94, 0.15);
+        color: #047857;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+      }
+      .log-table__event--access {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d4ed8;
+        border: 1px solid rgba(59, 130, 246, 0.26);
+      }
+      .log-table__event--activity {
+        background: rgba(245, 158, 11, 0.12);
+        color: #b45309;
+        border: 1px solid rgba(251, 191, 36, 0.28);
+      }
+      .log-table__path {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-family: "Fira Code", "JetBrains Mono", monospace;
+        font-size: 12px;
+        color: var(--fg);
+      }
+      .log-table__method {
+        padding: 2px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(148, 163, 184, 0.15);
+        font-weight: 600;
+      }
+      .log-table__path-text {
+        max-width: 260px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .log-table__referrer {
+        max-width: 320px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--muted);
+      }
+      .log-table__device {
+        display: grid;
+        gap: 2px;
+      }
+      .log-table__device-main {
+        font-weight: 600;
+      }
+      .log-table__device-sub {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .log-table__ua {
+        max-width: 320px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--muted);
+      }
+      .log-table__ip {
+        font-family: "Fira Code", "JetBrains Mono", monospace;
+        font-size: 12px;
       }
       .alert-stack { display: grid; gap: 12px; }
       .alert {
@@ -623,6 +743,78 @@
               </div>
             {% else %}
               <div class="empty-state">目前尚无用户，请先创建一个账号。</div>
+            {% endif %}
+          </section>
+          <section class="panel">
+            <div class="panel__header">
+              <div>
+                <h2>登录日志</h2>
+                <p class="panel__meta">覆盖 {{ login_records|length }} 条记录 · {{ login_user_count }} 位用户</p>
+              </div>
+              <div class="panel__actions">
+                <form method="post" action="{{ url_for('clear_login_logs_route') }}">
+                  <button type="submit" class="btn btn--ghost" {% if not login_records %}disabled{% endif %}>
+                    清除
+                  </button>
+                </form>
+              </div>
+            </div>
+            {% if login_records %}
+              <div class="log-table__scroll">
+                <table class="log-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 60px;">序号</th>
+                      <th>用户名</th>
+                      <th>事件</th>
+                      <th>访问页面</th>
+                      <th>发生时间</th>
+                      <th>客户端类型</th>
+                      <th>设备信息</th>
+                      <th>来源 IP</th>
+                      <th>来源页面</th>
+                      <th>浏览器标识</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for record in login_records %}
+                      <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ record.username }}</td>
+                        <td>
+                          {% set event_label = {
+                            'login': '登录',
+                            'access': '访问',
+                            'activity': '活动'
+                          }[record.event_type] if record.event_type in ['login', 'access', 'activity'] else record.event_type %}
+                          <span class="log-table__event log-table__event--{{ record.event_type }}">{{ event_label }}</span>
+                        </td>
+                        <td>
+                          <div class="log-table__path" title="{{ record.path or '—' }}">
+                            <span class="log-table__method">{{ record.method or '—' }}</span>
+                            <span class="log-table__path-text">{{ record.path or '—' }}</span>
+                          </div>
+                        </td>
+                        <td>{{ record.timestamp|format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                          <span class="log-table__pill">{{ record.client_type or '未知' }}</span>
+                        </td>
+                        <td>
+                          <div class="log-table__device">
+                            <span class="log-table__device-main">{{ record.platform or '未知平台' }}</span>
+                            <span class="log-table__device-sub">{{ record.browser or '未知浏览器' }}</span>
+                          </div>
+                        </td>
+                        <td class="log-table__ip">{{ record.ip_address or '—' }}</td>
+                        <td class="log-table__referrer" title="{{ record.referrer }}">{{ record.referrer or '—' }}</td>
+                        <td class="log-table__ua" title="{{ record.user_agent }}">{{ record.user_agent or '—' }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty-state">暂无登录记录，登录成功后将在此处展示。</div>
             {% endif %}
           </section>
         </main>
