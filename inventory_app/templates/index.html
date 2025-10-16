@@ -1175,7 +1175,10 @@
           <input type="hidden" name="name" id="adjustName" />
           <input type="hidden" name="store_id" value="{{ selected_store }}" />
           <input type="hidden" name="action" id="adjustAction" />
-          <label id="adjustQuantityLabel">调整数量<input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required /></label>
+          <label id="adjustQuantityLabel">
+            <span id="adjustQuantityLabelText">调整数量</span>
+            <input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required />
+          </label>
           <div class="actions" style="justify-content:flex-end;">
             <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
             <button type="submit" class="btn btn--primary" id="adjustSubmitBtn">确认</button>
@@ -1431,8 +1434,9 @@
         const adjustInfo = document.getElementById('adjustModalInfo');
         const adjustTitle = document.getElementById('adjustModalTitle');
         const adjustQuantityLabel = document.getElementById('adjustQuantityLabel');
+        const adjustQuantityLabelText = document.getElementById('adjustQuantityLabelText');
         const adjustSubmitBtn = document.getElementById('adjustSubmitBtn');
-        if(!adjustModal || !adjustButtons.length || !adjustActionInput || !adjustNameInput || !adjustQuantityInput || !adjustInfo || !adjustTitle || !adjustQuantityLabel || !adjustSubmitBtn){
+        if(!adjustModal || !adjustButtons.length || !adjustActionInput || !adjustNameInput || !adjustQuantityInput || !adjustInfo || !adjustTitle || !adjustQuantityLabel || !adjustQuantityLabelText || !adjustSubmitBtn){
           return;
         }
         adjustButtons.forEach(button => {
@@ -1456,7 +1460,7 @@
             adjustSubmitBtn.disabled = disable;
             adjustQuantityInput.placeholder = isOut ? '请输入出库数量' : '请输入入库数量';
             adjustTitle.textContent = isOut ? '出库' : '入库';
-            adjustQuantityLabel.textContent = isOut ? '出库数量' : '入库数量';
+            adjustQuantityLabelText.textContent = isOut ? '出库数量' : '入库数量';
             adjustSubmitBtn.textContent = isOut ? '确认出库' : '确认入库';
             const unitSuffix = unit ? ' ' + unit : '';
             let infoText = `${name} · 当前库存 ${current}${unitSuffix}`;
