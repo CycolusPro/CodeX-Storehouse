@@ -1242,7 +1242,10 @@ def create_app(
                 )
             except (ValueError, KeyError):
                 pass
-        return redirect(url_for("index"))
+        next_target = request.form.get("next") or request.args.get("next")
+        if not _is_safe_redirect(next_target):
+            next_target = request.referrer if _is_safe_redirect(request.referrer) else None
+        return redirect(next_target or url_for("index"))
 
     return app
 
