@@ -25,6 +25,7 @@ from flask import (
     session,
     url_for,
 )
+import xlrd
 import xlwt
 
 from .inventory import (
@@ -1351,13 +1352,20 @@ def _extract_rows_from_filestorage(upload: Any) -> List[Dict[str, Any]]:
             pass
     if not raw_bytes:
         raise ValueError("Empty file")
+    filename = getattr(upload, "filename", "") or ""
+    extension = Path(filename).suffix.lower()
+    if extension == ".xls":
+        return _parse_xls_rows(raw_bytes)
     if isinstance(raw_bytes, str):
         text = raw_bytes
-    else:
+        return _parse_csv_rows(text)
+    try:
+        text = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
         try:
-            text = raw_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError as exc:
-            raise ValueError("File must be UTF-8 encoded") from exc
+            return _parse_xls_rows(raw_bytes)
+        except ValueError as exc:
+            raise ValueError("File must be UTF-8 encoded or valid XLS") from exc
     return _parse_csv_rows(text)
 
 
@@ -1380,6 +1388,59 @@ def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
         normalized = {
             _normalize_csv_key(key): value for key, value in row.items()
         }
+        if not any(str(value or "").strip() for value in normalized.values()):
+            continue
+        record: Dict[str, Any] = {
+            "name": _resolve_csv_field(normalized, "name"),
+            "quantity": _resolve_csv_field(normalized, "quantity"),
+            "unit": _resolve_csv_field(normalized, "unit"),
+        }
+        if threshold_column_present:
+            record["threshold"] = _resolve_csv_field(normalized, "threshold")
+        if category_column_present:
+            record["category"] = _resolve_csv_field(normalized, "category")
+        rows.append(record)
+    return rows
+
+
+def _parse_xls_rows(data: bytes) -> List[Dict[str, Any]]:
+    try:
+        workbook = xlrd.open_workbook(file_contents=data)
+    except Exception as exc:
+        raise ValueError("Invalid XLS file") from exc
+    if workbook.nsheets == 0:
+        raise ValueError("Missing worksheet")
+    sheet = workbook.sheet_by_index(0)
+    if sheet.nrows == 0:
+        raise ValueError("Missing header row")
+    header_values = [sheet.cell_value(0, col) for col in range(sheet.ncols)]
+    header_labels = [str(value).strip() if value is not None else "" for value in header_values]
+    if not any(header_labels):
+        raise ValueError("Missing header row")
+    header_keys = {_normalize_csv_key(label) for label in header_labels if label}
+    threshold_column_present = bool(
+        header_keys & _CSV_FIELD_ALIASES_NORMALIZED.get("threshold", set())
+    )
+    category_column_present = bool(
+        header_keys & _CSV_FIELD_ALIASES_NORMALIZED.get("category", set())
+    )
+
+    rows: List[Dict[str, Any]] = []
+    for row_index in range(1, sheet.nrows):
+        normalized: Dict[str, Any] = {}
+        for col_index, label in enumerate(header_labels):
+            normalized_key = _normalize_csv_key(label)
+            if not normalized_key:
+                continue
+            cell = sheet.cell(row_index, col_index)
+            value = cell.value
+            if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                processed = ""
+            elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                processed = str(int(value)) if float(value).is_integer() else str(value)
+            else:
+                processed = str(value).strip()
+            normalized[normalized_key] = processed
         if not any(str(value or "").strip() for value in normalized.values()):
             continue
         record: Dict[str, Any] = {

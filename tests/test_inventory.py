@@ -1,6 +1,7 @@
 from io import BytesIO, StringIO
 import csv
 import xlrd
+import xlwt
 from pathlib import Path
 
 import pytest
@@ -617,10 +618,21 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
 
     _login(client)
 
-    csv_payload = "名称,数量,单位,阈值提醒\n茶叶,8,罐,3\n"
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("Sheet1")
+    header = ["名称", "数量", "单位", "阈值提醒"]
+    for index, value in enumerate(header):
+        sheet.write(0, index, value)
+    sheet.write(1, 0, "茶叶")
+    sheet.write(1, 1, 8)
+    sheet.write(1, 2, "罐")
+    sheet.write(1, 3, 3)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
     response = client.post(
         "/import",
-        data={"file": (BytesIO(csv_payload.encode("utf-8")), "bulk.csv")},
+        data={"file": (buffer, "bulk.xls")},
         content_type="multipart/form-data",
         follow_redirects=False,
     )
@@ -634,7 +646,7 @@ def test_import_form_endpoint(tmp_path: Path) -> None:
 
 def test_template_roundtrip_import(tmp_path: Path) -> None:
     pytest.importorskip("flask")
-    from inventory_app.app import create_app, _parse_csv_rows
+    from inventory_app.app import create_app, _parse_xls_rows
 
     storage = tmp_path / "data.json"
     app = create_app(storage)
@@ -650,14 +662,26 @@ def test_template_roundtrip_import(tmp_path: Path) -> None:
     template_sheet = template_book.sheet_by_index(0)
     header = [str(value).strip() for value in template_sheet.row_values(0)]
     assert header == ["名称", "数量", "单位", "阈值提醒", "库存分类"]
-    edited = ",".join(header) + "\n新品饮料,12,箱,3,饮料"
+    edited_book = xlwt.Workbook()
+    edited_sheet = edited_book.add_sheet("Sheet1")
+    for index, value in enumerate(header):
+        edited_sheet.write(0, index, value)
+    edited_sheet.write(1, 0, "新品饮料")
+    edited_sheet.write(1, 1, 12)
+    edited_sheet.write(1, 2, "箱")
+    edited_sheet.write(1, 3, 3)
+    edited_sheet.write(1, 4, "饮料")
+    edited_buffer = BytesIO()
+    edited_book.save(edited_buffer)
+    edited_buffer.seek(0)
 
-    parsed_rows = _parse_csv_rows(edited)
+    parsed_rows = _parse_xls_rows(edited_buffer.getvalue())
     assert parsed_rows and parsed_rows[0]["name"] == "新品饮料"
 
+    edited_buffer.seek(0)
     response = client.post(
         "/import",
-        data={"file": (BytesIO(edited.encode("utf-8")), "bulk.csv")},
+        data={"file": (edited_buffer, "bulk.xls")},
         content_type="multipart/form-data",
         follow_redirects=False,
     )
