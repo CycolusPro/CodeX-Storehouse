@@ -1051,6 +1051,7 @@
                             <input type="hidden" name="action" value="delete" />
                             <input type="hidden" name="name" value="{{ item.name }}" />
                             <input type="hidden" name="store_id" value="{{ selected_store }}" />
+                            <input type="hidden" name="next" value="{{ request.full_path }}" />
                             <button class="btn btn--danger" type="submit">删除</button>
                           </form>
                         {% endif %}
@@ -1122,6 +1123,7 @@
             <input type="hidden" name="action" value="update" />
             <input type="hidden" name="name" id="manageName" />
             <input type="hidden" name="store_id" value="{{ selected_store }}" />
+            <input type="hidden" name="next" value="{{ request.full_path }}" />
             <label>设置数量<input name="quantity" id="manageQuantity" type="number" min="0" step="1" /></label>
             <label>单位<input name="unit" id="manageUnit" placeholder="件" /></label>
             <label>库存分类
@@ -1159,6 +1161,7 @@
           </label>
           <label>阈值（可选）<input name="threshold" type="number" min="0" step="1" /></label>
           <input type="hidden" name="store_id" value="{{ selected_store }}" />
+          <input type="hidden" name="next" value="{{ request.full_path }}" />
           <div class="actions" style="justify-content:flex-end;">
             <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
             <button type="submit" class="btn btn--primary">保存</button>
@@ -1175,6 +1178,7 @@
           <input type="hidden" name="name" id="adjustName" />
           <input type="hidden" name="store_id" value="{{ selected_store }}" />
           <input type="hidden" name="action" id="adjustAction" />
+          <input type="hidden" name="next" value="{{ request.full_path }}" />
           <label id="adjustQuantityLabel">
             <span id="adjustQuantityLabelText">调整数量</span>
             <input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required />
@@ -1200,6 +1204,7 @@
           <input type="hidden" name="action" value="transfer" />
           <input type="hidden" name="name" id="transferName" />
           <input type="hidden" name="store_id" id="transferSourceStore" value="{{ selected_store }}" />
+          <input type="hidden" name="next" value="{{ request.full_path }}" />
           <div class="panel__meta">当前调出门店：<strong>{{ stores[selected_store]['name'] }}</strong></div>
           <label>调入门店
             <select name="target_store_id" id="transferTargetStore">
