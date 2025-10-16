@@ -1175,7 +1175,14 @@
           <input type="hidden" name="name" id="adjustName" />
           <input type="hidden" name="store_id" value="{{ selected_store }}" />
           <input type="hidden" name="action" id="adjustAction" />
-          <label id="adjustQuantityLabel">调整数量<input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required /></label>
+          <label id="adjustQuantityLabel">
+            <span id="adjustQuantityLabelText">调整数量</span>
+            <input id="adjustQuantity" name="quantity" type="number" min="1" step="1" required />
+          </label>
+          <label id="adjustTimeLabel">
+            <span id="adjustTimeLabelText">调整时间</span>
+            <input id="adjustTime" name="adjusted_at" type="datetime-local" required />
+          </label>
           <div class="actions" style="justify-content:flex-end;">
             <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
             <button type="submit" class="btn btn--primary" id="adjustSubmitBtn">确认</button>
@@ -1428,13 +1435,25 @@
         const adjustActionInput = document.getElementById('adjustAction');
         const adjustNameInput = document.getElementById('adjustName');
         const adjustQuantityInput = document.getElementById('adjustQuantity');
+        const adjustTimeInput = document.getElementById('adjustTime');
         const adjustInfo = document.getElementById('adjustModalInfo');
         const adjustTitle = document.getElementById('adjustModalTitle');
         const adjustQuantityLabel = document.getElementById('adjustQuantityLabel');
+        const adjustQuantityLabelText = document.getElementById('adjustQuantityLabelText');
+        const adjustTimeLabelText = document.getElementById('adjustTimeLabelText');
         const adjustSubmitBtn = document.getElementById('adjustSubmitBtn');
-        if(!adjustModal || !adjustButtons.length || !adjustActionInput || !adjustNameInput || !adjustQuantityInput || !adjustInfo || !adjustTitle || !adjustQuantityLabel || !adjustSubmitBtn){
+        if(!adjustModal || !adjustButtons.length || !adjustActionInput || !adjustNameInput || !adjustQuantityInput || !adjustTimeInput || !adjustInfo || !adjustTitle || !adjustQuantityLabel || !adjustQuantityLabelText || !adjustTimeLabelText || !adjustSubmitBtn){
           return;
         }
+        const toDatetimeLocalValue = (date) => {
+          const pad = (value) => String(value).padStart(2, '0');
+          const year = date.getFullYear();
+          const month = pad(date.getMonth() + 1);
+          const day = pad(date.getDate());
+          const hours = pad(date.getHours());
+          const minutes = pad(date.getMinutes());
+          return `${year}-${month}-${day}T${hours}:${minutes}`;
+        };
         adjustButtons.forEach(button => {
           button.addEventListener('click', () => {
             const action = button.getAttribute('data-adjust') || 'in';
@@ -1446,6 +1465,7 @@
             adjustNameInput.value = name;
             adjustQuantityInput.value = '';
             adjustQuantityInput.min = 1;
+            adjustTimeInput.value = toDatetimeLocalValue(new Date());
             if(isOut && current > 0){
               adjustQuantityInput.setAttribute('max', String(current));
             } else {
@@ -1456,7 +1476,8 @@
             adjustSubmitBtn.disabled = disable;
             adjustQuantityInput.placeholder = isOut ? '请输入出库数量' : '请输入入库数量';
             adjustTitle.textContent = isOut ? '出库' : '入库';
-            adjustQuantityLabel.textContent = isOut ? '出库数量' : '入库数量';
+            adjustQuantityLabelText.textContent = isOut ? '出库数量' : '入库数量';
+            adjustTimeLabelText.textContent = isOut ? '出库时间' : '入库时间';
             adjustSubmitBtn.textContent = isOut ? '确认出库' : '确认入库';
             const unitSuffix = unit ? ' ' + unit : '';
             let infoText = `${name} · 当前库存 ${current}${unitSuffix}`;
