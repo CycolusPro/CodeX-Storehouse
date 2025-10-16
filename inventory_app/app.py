@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping
 from functools import wraps
 from urllib.parse import urlsplit, urljoin
 import os
+import time
 
 from flask import (
     Flask,
@@ -108,6 +109,56 @@ def create_app(
     def _current_username() -> Optional[str]:
         user = _current_user()
         return None if user is None else user.username
+
+    def _collect_login_metadata() -> Dict[str, Optional[str]]:
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        ip_address = (forwarded_for.split(",")[0].strip() if forwarded_for else None)
+        if not ip_address:
+            ip_address = request.remote_addr
+        user_agent_string = request.headers.get("User-Agent", "")
+        user_agent = request.user_agent
+        platform_raw = getattr(user_agent, "platform", None)
+        platform = None
+        if platform_raw:
+            platform_labels = {
+                "macos": "macOS",
+                "mac": "macOS",
+                "darwin": "macOS",
+                "windows": "Windows",
+                "linux": "Linux",
+                "iphone": "iOS",
+                "ipad": "iPadOS",
+                "android": "Android",
+            }
+            platform = platform_labels.get(platform_raw.lower(), platform_raw)
+        browser_raw = getattr(user_agent, "browser", None)
+        browser = None
+        if browser_raw:
+            browser_labels = {
+                "edge": "Microsoft Edge",
+                "edg": "Microsoft Edge",
+                "chrome": "Chrome",
+                "firefox": "Firefox",
+                "safari": "Safari",
+                "msie": "Internet Explorer",
+            }
+            browser = browser_labels.get(browser_raw.lower(), browser_raw)
+        client_type: Optional[str]
+        if platform_raw and platform_raw.lower() == "ipad":
+            client_type = "平板端"
+        elif getattr(user_agent, "mobile", None):
+            client_type = "移动端"
+        elif user_agent_string:
+            client_type = "桌面端"
+        else:
+            client_type = None
+        return {
+            "ip_address": ip_address,
+            "user_agent": user_agent_string,
+            "client_type": client_type,
+            "platform": platform,
+            "browser": browser,
+        }
 
     def _build_permissions(user: Optional[Any]) -> Dict[str, bool]:
         role = getattr(user, "role", None)
@@ -259,6 +310,61 @@ def create_app(
         except KeyError:
             session.pop("user", None)
 
+    @app.before_request
+    def audit_authenticated_request() -> None:
+        user = _current_user()
+        if user is None:
+            return
+        if request.method in {"OPTIONS", "HEAD"}:
+            return
+        endpoint = request.endpoint or ""
+        if endpoint.startswith("static") or (request.blueprint or "") == "static":
+            return
+        if request.path.startswith("/static/"):
+            return
+        now_ts = time.time()
+        last_event = session.get("_last_access_audit")
+        should_record = False
+        if not isinstance(last_event, dict):
+            should_record = True
+        else:
+            last_path = last_event.get("path")
+            last_method = last_event.get("method")
+            last_timestamp = last_event.get("ts")
+            if not isinstance(last_timestamp, (int, float)):
+                try:
+                    last_timestamp = float(last_timestamp)
+                except (TypeError, ValueError):
+                    last_timestamp = None
+            if last_timestamp is None:
+                should_record = True
+            else:
+                time_elapsed = now_ts - float(last_timestamp)
+                if last_path != request.path or last_method != request.method:
+                    should_record = True
+                elif time_elapsed >= 300:
+                    should_record = True
+        if not should_record:
+            return
+        metadata = _collect_login_metadata()
+        user_manager.record_login(
+            user.username,
+            ip_address=str(metadata.get("ip_address") or ""),
+            user_agent=str(metadata.get("user_agent") or ""),
+            client_type=metadata.get("client_type"),
+            platform=metadata.get("platform"),
+            browser=metadata.get("browser"),
+            event_type="access",
+            path=request.path,
+            method=request.method,
+            referrer=str(request.headers.get("Referer") or ""),
+        )
+        session["_last_access_audit"] = {
+            "path": request.path,
+            "method": request.method,
+            "ts": now_ts,
+        }
+
     @app.context_processor
     def inject_globals() -> Dict[str, Any]:
         user = _current_user()
@@ -314,6 +420,19 @@ def create_app(
             else:
                 session["user"] = user.username
                 session.permanent = True
+                metadata = _collect_login_metadata()
+                user_manager.record_login(
+                    user.username,
+                    ip_address=str(metadata.get("ip_address") or ""),
+                    user_agent=str(metadata.get("user_agent") or ""),
+                    client_type=metadata.get("client_type"),
+                    platform=metadata.get("platform"),
+                    browser=metadata.get("browser"),
+                    event_type="login",
+                    path=request.path,
+                    method=request.method,
+                    referrer=str(request.headers.get("Referer") or ""),
+                )
                 redirect_target = request.form.get("next") or request.args.get("next")
                 if not _is_safe_redirect(redirect_target):
                     redirect_target = url_for("index")
@@ -1092,7 +1211,22 @@ def create_app(
         users = sorted(
             user_manager.list_users().values(), key=lambda u: u.username.lower()
         )
-        return render_template("users.html", users=users)
+        login_records = user_manager.list_login_records()
+        login_user_count = len({record.username for record in login_records})
+        return render_template(
+            "users.html",
+            users=users,
+            login_records=login_records,
+            login_user_count=login_user_count,
+        )
+
+    @app.post("/admin/login-logs/clear")
+    @role_required("super_admin")
+    def clear_login_logs_route() -> Any:
+        user_manager.clear_login_records()
+        session.pop("_last_access_audit", None)
+        flash("已清空登录日志", "success")
+        return redirect(url_for("manage_users"))
 
     @app.post("/users")
     @role_required("super_admin")
