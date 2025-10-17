@@ -3,6 +3,7 @@ import csv
 import xlrd
 import xlwt
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -571,16 +572,27 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     assert "inventory_export" in export_resp.headers["Content-Disposition"]
     export_book = xlrd.open_workbook(file_contents=export_resp.data)
     export_sheet = export_book.sheet_by_index(0)
-    export_header = [str(value).strip() for value in export_sheet.row_values(0)]
-    assert "SKU 名称" in export_header
-    assert "库存阈值" in export_header
+    title_row = [str(value).strip() for value in export_sheet.row_values(0)]
+    assert title_row[0] == "星选送库存盘点表"
+
+    header_row_index = None
+    export_header: List[str] = []
+    for row_idx in range(export_sheet.nrows):
+        row_values = [str(value).strip() for value in export_sheet.row_values(row_idx)]
+        if "商品名称" in row_values and "库存数量" in row_values:
+            export_header = row_values
+            header_row_index = row_idx
+            break
+    assert header_row_index is not None
+    assert export_header == ["门店", "分类", "商品名称", "库存数量", "单位"]
+
     data_rows = []
-    for row_idx in range(1, export_sheet.nrows):
+    for row_idx in range(header_row_index + 1, export_sheet.nrows):
         row_values = export_sheet.row_values(row_idx)
         if not any(str(value).strip() for value in row_values):
             continue
         data_rows.append(dict(zip(export_header, row_values)))
-    assert any(row.get("SKU 名称") == "咖啡豆" for row in data_rows)
+    assert any(row.get("商品名称") == "咖啡豆" for row in data_rows)
 
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200
