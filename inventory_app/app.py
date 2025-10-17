@@ -893,30 +893,38 @@ def create_app(
     def export_inventory() -> Response:
         selected_store = _resolve_store_id(request.args.get("store_id"))
         rows = manager.export_items(store_id=selected_store)
-        header_map = [
-            ("store_id", "门店 ID"),
-            ("store_name", "门店名称"),
-            ("category_id", "分类 ID"),
-            ("category_name", "分类名称"),
-            ("name", "SKU 名称"),
-            ("quantity", "库存数量"),
-            ("unit", "单位"),
-            ("created_at", "创建时间"),
-            ("last_in", "最近入库时间"),
-            ("last_in_delta", "最近入库数量"),
-            ("last_out", "最近出库时间"),
-            ("last_out_delta", "最近出库数量"),
-            ("threshold", "库存阈值"),
-        ]
-        localized_rows = []
+        report_rows: List[Dict[str, Any]] = []
+        stores_map = _list_stores()
+        store_label = "全部门店"
+        if selected_store:
+            store_entry = stores_map.get(selected_store, {})
+            store_label = store_entry.get("name") or selected_store or "全部门店"
         for row in rows:
-            localized_row = {}
-            for key, label in header_map:
-                value = row.get(key, "") if isinstance(row, dict) else ""
-                localized_row[label] = "" if value is None else value
-            localized_rows.append(localized_row)
-        fieldnames = [label for _, label in header_map]
-        content = _rows_to_xls(fieldnames, localized_rows)
+            if not isinstance(row, dict):
+                continue
+            quantity_raw = row.get("quantity", 0)
+            try:
+                quantity_value = int(quantity_raw)
+            except (TypeError, ValueError):
+                quantity_value = quantity_raw if quantity_raw is not None else 0
+            report_rows.append(
+                {
+                    "门店": row.get("store_name") or row.get("store_id") or "—",
+                    "分类": row.get("category_name") or "未分类",
+                    "商品名称": row.get("name") or "",
+                    "库存数量": quantity_value,
+                    "单位": row.get("unit") or "",
+                }
+            )
+        generated_at = datetime.now().astimezone()
+        generated_label = generated_at.strftime("%Y年%m月%d日 %H:%M")
+        username = _current_username() or "—"
+        content = _inventory_report_to_xls(
+            report_rows,
+            generated_label=generated_label,
+            username=username,
+            store_label=store_label if selected_store else None,
+        )
         filename = _timestamped_filename("inventory_export")
         return _xls_response(content, filename)
 
@@ -1422,6 +1430,124 @@ def _parse_threshold_value(value: Any) -> Optional[int]:
     if parsed < 0:
         return None
     return parsed
+
+
+def _inventory_report_to_xls(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    generated_label: str,
+    username: str,
+    store_label: Optional[str] = None,
+) -> bytes:
+    fieldnames = ["门店", "分类", "商品名称", "库存数量", "单位"]
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("库存盘点")
+
+    title_style = xlwt.easyxf(
+        "font: bold on, height 360; align: horiz center, vert center"
+    )
+    metadata_style = xlwt.easyxf(
+        "font: height 220; align: horiz left, vert center"
+    )
+    header_style = xlwt.easyxf(
+        "font: bold on; align: horiz center, vert center;"
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
+    text_style = xlwt.easyxf(
+        "align: horiz left, vert center;"
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
+    number_style = xlwt.easyxf(
+        "align: horiz center, vert center;"
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
+    merged_label_style = xlwt.easyxf(
+        "align: horiz center, vert center;"
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
+
+    column_widths = [14, 14, 28, 12, 10]
+    for index, width in enumerate(column_widths):
+        sheet.col(index).width = 256 * width
+
+    sheet.write_merge(0, 0, 0, len(fieldnames) - 1, "星选送库存盘点表", title_style)
+
+    meta_parts = [f"制表时间：{generated_label}", f"负责人：{username or '—'}"]
+    if store_label:
+        meta_parts.append(f"门店：{store_label}")
+    sheet.write_merge(
+        1,
+        1,
+        0,
+        len(fieldnames) - 1,
+        "    ".join(meta_parts),
+        metadata_style,
+    )
+
+    header_row_index = 3
+    for col_index, field in enumerate(fieldnames):
+        sheet.write(header_row_index, col_index, field, header_style)
+
+    if rows:
+        data_start_row = header_row_index + 1
+        category_col_index = fieldnames.index("分类")
+        data_end_row = data_start_row + len(rows) - 1
+
+        category_labels: List[str] = []
+        for offset, entry in enumerate(rows):
+            row_index = data_start_row + offset
+            entry_mapping = entry if isinstance(entry, Mapping) else {}
+            category_labels.append(str(entry_mapping.get("分类") or "未分类"))
+            for col_index, field in enumerate(fieldnames):
+                if field in {"门店", "分类"}:
+                    continue
+                value = entry_mapping.get(field, "")
+                if field == "库存数量" and isinstance(value, (int, float)):
+                    sheet.write(row_index, col_index, value, number_style)
+                else:
+                    sheet.write(row_index, col_index, value, text_style)
+
+        if isinstance(rows[0], Mapping):
+            default_store_value = rows[0].get("门店")
+        else:
+            default_store_value = ""
+        store_value = store_label or str(default_store_value or "全部门店")
+        sheet.write_merge(
+            data_start_row,
+            data_end_row,
+            0,
+            0,
+            store_value,
+            merged_label_style,
+        )
+
+        group_start = data_start_row
+        current_label = category_labels[0]
+        for offset, label in enumerate(category_labels[1:], start=1):
+            row_index = data_start_row + offset
+            if label != current_label:
+                sheet.write_merge(
+                    group_start,
+                    row_index - 1,
+                    category_col_index,
+                    category_col_index,
+                    current_label,
+                    merged_label_style,
+                )
+                group_start = row_index
+                current_label = label
+        sheet.write_merge(
+            group_start,
+            data_end_row,
+            category_col_index,
+            category_col_index,
+            current_label,
+            merged_label_style,
+        )
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def _rows_to_xls(

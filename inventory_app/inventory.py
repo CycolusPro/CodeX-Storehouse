@@ -855,7 +855,18 @@ class InventoryManager:
                     payload["store_name"] = store.get("name", sid)
                     payload["category_name"] = category_entry.get("name", item.category)
                     records.append(payload)
-        records.sort(key=lambda row: (row.get("store_name", ""), row.get("name", "")))
+        def _sort_key(row: Dict[str, Any]) -> tuple[Any, ...]:
+            quantity_value = row.get("quantity")
+            try:
+                quantity = int(quantity_value)
+            except (TypeError, ValueError):
+                quantity = 0
+            store_name = str(row.get("store_name") or "")
+            category_name = str(row.get("category_name") or "")
+            name = str(row.get("name") or "")
+            return (store_name, category_name, -quantity, name)
+
+        records.sort(key=_sort_key)
         return records
 
     # ------------------------------------------------------------------
