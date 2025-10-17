@@ -540,8 +540,19 @@ def create_app(
         if cascade_value is None:
             cascade_value = request.form.get("cascade") or request.args.get("cascade")
         cascade = str(cascade_value).lower() in {"1", "true", "yes", "on"}
+        store_value = payload.get("store_id") if isinstance(payload, Mapping) else None
+        if store_value is None:
+            store_value = request.form.get("store_id") or request.args.get("store_id")
+        resolved_store = None
+        if store_value is not None:
+            resolved_store = _resolve_store_id(store_value)
         try:
-            manager.delete_category(category_id, cascade=cascade, user=_current_username())
+            manager.delete_category(
+                category_id,
+                cascade=cascade,
+                user=_current_username(),
+                store_id=resolved_store,
+            )
         except ValueError as exc:
             if request.is_json:
                 return {"error": str(exc)}, 400
