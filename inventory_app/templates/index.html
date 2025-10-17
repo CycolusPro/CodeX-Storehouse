@@ -778,6 +778,28 @@
         display: flex;
         justify-content: flex-end;
       }
+      #importPreviewModal .modal__dialog {
+        max-height: min(90vh, 760px);
+        display: flex;
+        flex-direction: column;
+      }
+      .import-preview__content {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .import-preview__table-wrapper {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+      }
+      .import-preview__table-wrapper table {
+        min-width: 100%;
+      }
       .modal__close {
         position: absolute;
         top: 16px;
@@ -1380,11 +1402,13 @@
         <button type="button" class="modal__close" id="importPreviewClose">&times;</button>
         <h2 style="margin:0; font-size:22px;">导入前检查</h2>
         <p class="panel__meta">请确认系统已正确识别即将导入的 SKU 数据。</p>
-        <div id="importPreviewStatus" class="panel__meta"></div>
-        <div style="overflow:auto; border:1px solid var(--border); border-radius:16px;">
-          <table id="importPreviewTable"></table>
+        <div class="import-preview__content">
+          <div id="importPreviewStatus" class="panel__meta"></div>
+          <div class="import-preview__table-wrapper">
+            <table id="importPreviewTable"></table>
+          </div>
+          <div id="importPreviewSummary" class="panel__meta"></div>
         </div>
-        <div id="importPreviewSummary" class="panel__meta"></div>
         <div class="actions" style="justify-content:flex-end;">
           <button type="button" class="btn btn--ghost" id="importPreviewCancel">取消</button>
           <button type="button" class="btn btn--primary" id="importPreviewConfirm" disabled>确认导入</button>
