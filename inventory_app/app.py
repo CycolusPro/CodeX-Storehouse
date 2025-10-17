@@ -1472,7 +1472,7 @@ def _inventory_report_to_xls(
 
     sheet.write_merge(0, 0, 0, len(fieldnames) - 1, "星选送库存盘点表", title_style)
 
-    meta_parts = [f"制表时间：{generated_label}", f"负责人：{username or '—'}"]
+    meta_parts = [f"制表时间：{generated_label}", f"用户：{username or '—'}"]
     if store_label:
         meta_parts.append(f"门店：{store_label}")
     sheet.write_merge(
