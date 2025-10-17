@@ -272,6 +272,32 @@ def test_store_and_category_management(tmp_path: Path) -> None:
     assert created_store["id"] not in manager.list_stores()
 
 
+def test_delete_category_cascade_scoped_to_store(tmp_path: Path) -> None:
+    storage = tmp_path / "data.json"
+    manager = InventoryManager(storage)
+
+    other_store = manager.create_store("南区仓库")
+    # Assign the same category to items in two different stores
+    item_default = manager.set_quantity("苹果", 5, category="生鲜", store_id="default")
+    item_other = manager.set_quantity(
+        "香蕉", 7, category="生鲜", store_id=other_store["id"]
+    )
+    assert item_default.category == item_other.category
+
+    manager.delete_category(
+        item_default.category,
+        cascade=True,
+        store_id="default",
+    )
+
+    with pytest.raises(KeyError):
+        manager.get_item("苹果", store_id="default")
+
+    remaining = manager.get_item("香蕉", store_id=other_store["id"])
+    assert remaining.quantity == 7
+    assert remaining.category == "uncategorized"
+
+
 def test_import_creates_category(tmp_path: Path) -> None:
     storage = tmp_path / "data.json"
     manager = InventoryManager(storage)

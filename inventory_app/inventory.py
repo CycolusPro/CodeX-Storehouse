@@ -308,6 +308,7 @@ class InventoryManager:
         *,
         cascade: bool = False,
         user: Optional[str] = None,
+        store_id: Optional[str] = None,
     ) -> None:
         if category_id == _UNCATEGORIZED_ID:
             raise ValueError("默认分类无法删除")
@@ -316,6 +317,9 @@ class InventoryManager:
             categories = state["categories"]
             if category_id not in categories:
                 raise KeyError(f"Category '{category_id}' not found")
+            resolved_store: Optional[str] = None
+            if store_id is not None:
+                resolved_store = self._normalize_store_id(state, store_id)
             default_category = _UNCATEGORIZED_ID
             for store_id, store in state["stores"].items():
                 items = store.get("items", {})
@@ -324,7 +328,10 @@ class InventoryManager:
                     normalized = self._coerce_record(record, default_category=default_category)
                     if normalized.get("category", default_category) != category_id:
                         continue
-                    if cascade:
+                    should_cascade = cascade and (
+                        resolved_store is None or store_id == resolved_store
+                    )
+                    if should_cascade:
                         meta = {
                             "previous_quantity": normalized.get("quantity", 0),
                             "unit": normalized.get("unit", ""),
