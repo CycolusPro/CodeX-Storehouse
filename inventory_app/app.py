@@ -1461,6 +1461,10 @@ def _inventory_report_to_xls(
         "align: horiz center, vert center;"
         "borders: left thin, right thin, top thin, bottom thin"
     )
+    merged_label_style = xlwt.easyxf(
+        "align: horiz center, vert center;"
+        "borders: left thin, right thin, top thin, bottom thin"
+    )
 
     column_widths = [14, 14, 28, 12, 10]
     for index, width in enumerate(column_widths):
@@ -1480,18 +1484,66 @@ def _inventory_report_to_xls(
         metadata_style,
     )
 
-    row_index = 3
+    header_row_index = 3
     for col_index, field in enumerate(fieldnames):
-        sheet.write(row_index, col_index, field, header_style)
+        sheet.write(header_row_index, col_index, field, header_style)
 
-    for entry in rows:
-        row_index += 1
-        for col_index, field in enumerate(fieldnames):
-            value = entry.get(field, "") if isinstance(entry, Mapping) else ""
-            if field == "库存数量" and isinstance(value, (int, float)):
-                sheet.write(row_index, col_index, value, number_style)
-            else:
-                sheet.write(row_index, col_index, value, text_style)
+    if rows:
+        data_start_row = header_row_index + 1
+        category_col_index = fieldnames.index("分类")
+        data_end_row = data_start_row + len(rows) - 1
+
+        category_labels: List[str] = []
+        for offset, entry in enumerate(rows):
+            row_index = data_start_row + offset
+            entry_mapping = entry if isinstance(entry, Mapping) else {}
+            category_labels.append(str(entry_mapping.get("分类") or "未分类"))
+            for col_index, field in enumerate(fieldnames):
+                if field in {"门店", "分类"}:
+                    continue
+                value = entry_mapping.get(field, "")
+                if field == "库存数量" and isinstance(value, (int, float)):
+                    sheet.write(row_index, col_index, value, number_style)
+                else:
+                    sheet.write(row_index, col_index, value, text_style)
+
+        if isinstance(rows[0], Mapping):
+            default_store_value = rows[0].get("门店")
+        else:
+            default_store_value = ""
+        store_value = store_label or str(default_store_value or "全部门店")
+        sheet.write_merge(
+            data_start_row,
+            data_end_row,
+            0,
+            0,
+            store_value,
+            merged_label_style,
+        )
+
+        group_start = data_start_row
+        current_label = category_labels[0]
+        for offset, label in enumerate(category_labels[1:], start=1):
+            row_index = data_start_row + offset
+            if label != current_label:
+                sheet.write_merge(
+                    group_start,
+                    row_index - 1,
+                    category_col_index,
+                    category_col_index,
+                    current_label,
+                    merged_label_style,
+                )
+                group_start = row_index
+                current_label = label
+        sheet.write_merge(
+            group_start,
+            data_end_row,
+            category_col_index,
+            category_col_index,
+            current_label,
+            merged_label_style,
+        )
 
     buffer = BytesIO()
     workbook.save(buffer)

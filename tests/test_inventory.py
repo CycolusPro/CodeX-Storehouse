@@ -561,16 +561,22 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/items/import",
-        json={"items": [{"name": "咖啡豆", "quantity": 5, "unit": "袋", "threshold": 2}]},
+        json={
+            "items": [
+                {"name": "薯片", "quantity": 12, "unit": "箱", "category": "零食"},
+                {"name": "咖啡豆", "quantity": 5, "unit": "袋", "category": "饮料", "threshold": 2},
+                {"name": "绿茶", "quantity": 9, "unit": "瓶", "category": "饮料"},
+            ]
+        },
     )
     assert response.status_code == 200
     payload = response.get_json()
-    assert payload["count"] == 1
+    assert payload["count"] == 3
 
     export_resp = client.get("/api/items/export")
     assert export_resp.status_code == 200
     assert "inventory_export" in export_resp.headers["Content-Disposition"]
-    export_book = xlrd.open_workbook(file_contents=export_resp.data)
+    export_book = xlrd.open_workbook(file_contents=export_resp.data, formatting_info=True)
     export_sheet = export_book.sheet_by_index(0)
     title_row = [str(value).strip() for value in export_sheet.row_values(0)]
     assert title_row[0] == "星选送库存盘点表"
@@ -586,13 +592,60 @@ def test_import_export_endpoints(tmp_path: Path) -> None:
     assert header_row_index is not None
     assert export_header == ["门店", "分类", "商品名称", "库存数量", "单位"]
 
+    header_index = {value: idx for idx, value in enumerate(export_header)}
     data_rows = []
+    last_store = ""
+    last_category = ""
     for row_idx in range(header_row_index + 1, export_sheet.nrows):
         row_values = export_sheet.row_values(row_idx)
         if not any(str(value).strip() for value in row_values):
             continue
-        data_rows.append(dict(zip(export_header, row_values)))
-    assert any(row.get("商品名称") == "咖啡豆" for row in data_rows)
+        store_cell = export_sheet.cell_value(row_idx, header_index["门店"])
+        category_cell = export_sheet.cell_value(row_idx, header_index["分类"])
+        if str(store_cell).strip():
+            last_store = str(store_cell).strip()
+        if str(category_cell).strip():
+            last_category = str(category_cell).strip()
+        data_rows.append(
+            {
+                "excel_row": row_idx,
+                "门店": last_store,
+                "分类": last_category or "未分类",
+                "商品名称": str(export_sheet.cell_value(row_idx, header_index["商品名称"])).strip(),
+                "库存数量": int(export_sheet.cell_value(row_idx, header_index["库存数量"])),
+                "单位": str(export_sheet.cell_value(row_idx, header_index["单位"])).strip(),
+            }
+        )
+
+    assert len(data_rows) == payload["count"]
+    categories = [row["分类"] for row in data_rows]
+    assert categories == sorted(categories)
+
+    from itertools import groupby
+
+    for category, group in groupby(data_rows, key=lambda row: row["分类"]):
+        quantities = [row["库存数量"] for row in group]
+        assert quantities == sorted(quantities, reverse=True)
+
+    merged_ranges = {
+        (rlow, rhigh, clow, chigh)
+        for rlow, rhigh, clow, chigh in getattr(export_sheet, "merged_cells", [])
+    }
+    data_start_row = header_row_index + 1
+    data_end_row = data_start_row + len(data_rows)
+    store_col = header_index["门店"]
+    category_col = header_index["分类"]
+    assert (data_start_row, data_end_row, store_col, store_col + 1) in merged_ranges
+
+    category_offsets = {}
+    for index, row in enumerate(data_rows):
+        category_offsets.setdefault(row["分类"], []).append(index)
+    for offsets in category_offsets.values():
+        start_index = offsets[0]
+        end_index = offsets[-1]
+        start_row = data_start_row + start_index
+        end_row = data_start_row + end_index + 1
+        assert (start_row, end_row, category_col, category_col + 1) in merged_ranges
 
     template_resp = client.get("/api/items/template")
     assert template_resp.status_code == 200

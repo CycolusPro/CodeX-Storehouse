@@ -864,7 +864,7 @@ class InventoryManager:
             store_name = str(row.get("store_name") or "")
             category_name = str(row.get("category_name") or "")
             name = str(row.get("name") or "")
-            return (-quantity, store_name, category_name, name)
+            return (store_name, category_name, -quantity, name)
 
         records.sort(key=_sort_key)
         return records
