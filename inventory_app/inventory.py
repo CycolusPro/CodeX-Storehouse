@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 import json
 import re
 
@@ -707,6 +707,8 @@ class InventoryManager:
             state_copy = deepcopy(state)
             resolved_store = self._normalize_store_id(state_copy, store_id)
             categories = state_copy["categories"]
+            store_entry = state_copy["stores"].get(resolved_store, {})
+            items = store_entry.get("items", {}) if isinstance(store_entry, dict) else {}
             for index, row in enumerate(rows, start=1):
                 entry: Dict[str, Any] = {
                     "index": index,
@@ -722,6 +724,15 @@ class InventoryManager:
                     ),
                     "category_input": "",
                     "messages": [],
+                    "existing": False,
+                    "existing_quantity": None,
+                    "existing_unit": "",
+                    "existing_category_id": None,
+                    "existing_category_name": "",
+                    "quantity_delta": None,
+                    "quantity_changed": False,
+                    "unit_changed": False,
+                    "category_changed": False,
                 }
                 if not isinstance(row, dict):
                     entry["messages"].append("无法识别的行格式")
@@ -771,9 +782,44 @@ class InventoryManager:
                 entry["category_name"] = category_record.get(
                     "name", category_id or _UNCATEGORIZED_NAME
                 )
+                if name and name in items:
+                    existing_raw = items.get(name)
+                    normalized_existing = self._coerce_record(
+                        existing_raw, default_category=_UNCATEGORIZED_ID
+                    )
+                    entry["existing"] = True
+                    entry["existing_quantity"] = normalized_existing.get("quantity")
+                    entry["existing_unit"] = normalized_existing.get("unit", "")
+                    existing_category_id = normalized_existing.get(
+                        "category", _UNCATEGORIZED_ID
+                    )
+                    entry["existing_category_id"] = existing_category_id
+                    entry["existing_category_name"] = categories.get(
+                        existing_category_id, {}
+                    ).get("name", existing_category_id or _UNCATEGORIZED_NAME)
                 entry["store_id"] = resolved_store
                 if name and quantity is not None and not entry["messages"]:
                     entry["valid"] = True
+                if entry["valid"]:
+                    if entry["existing"]:
+                        existing_quantity = cast(
+                            Optional[int], entry["existing_quantity"]
+                        )
+                        previous_quantity = (
+                            0 if existing_quantity is None else int(existing_quantity)
+                        )
+                        entry["quantity_delta"] = entry["quantity"] - previous_quantity
+                        entry["quantity_changed"] = entry["quantity_delta"] != 0
+                        entry["unit_changed"] = (
+                            (entry["unit"] or "")
+                            != (entry["existing_unit"] or "")
+                        )
+                        entry["category_changed"] = (
+                            (entry["existing_category_id"] or _UNCATEGORIZED_ID)
+                            != (entry["category_id"] or _UNCATEGORIZED_ID)
+                        )
+                    else:
+                        entry["quantity_delta"] = entry["quantity"]
                 preview.append(entry)
         return preview
 
