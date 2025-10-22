@@ -1,6 +1,8 @@
 """Flask application providing a minimal inventory management API and UI."""
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import json
 import math
@@ -92,6 +94,54 @@ def create_app(
         else storage_path.with_name("users_data.json")
     )
     user_manager = UserManager(user_storage)
+
+    def _json_error(message: str, status_code: int) -> Response:
+        response = jsonify({"error": message})
+        response.status_code = status_code
+        if status_code == 401:
+            response.headers.setdefault(
+                "WWW-Authenticate", 'Basic realm="Inventory", charset="UTF-8"'
+            )
+        return response
+
+    def _authenticate_basic_credentials() -> Optional[Any]:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header or not auth_header.startswith("Basic "):
+            return None
+        encoded = auth_header.split(" ", 1)[1].strip()
+        if not encoded:
+            return None
+        try:
+            decoded_bytes = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            return None
+        try:
+            decoded = decoded_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        username, separator, password = decoded.partition(":")
+        if not separator:
+            return None
+        return user_manager.authenticate(username, password)
+
+    def _finalize_login(user: Any) -> None:
+        session["user"] = user.username
+        session.permanent = True
+        metadata = _collect_login_metadata()
+        user_manager.record_login(
+            user.username,
+            ip_address=str(metadata.get("ip_address") or ""),
+            user_agent=str(metadata.get("user_agent") or ""),
+            client_type=metadata.get("client_type"),
+            platform=metadata.get("platform"),
+            browser=metadata.get("browser"),
+            event_type="login",
+            path=request.path,
+            method=request.method,
+            referrer=str(request.headers.get("Referer") or ""),
+        )
+
+    basic_audit_cache: Dict[tuple[str, str, str], float] = {}
 
     def _is_safe_redirect(target: Optional[str]) -> bool:
         if not target:
@@ -290,25 +340,30 @@ def create_app(
 
     def _unauthorized_response():
         if _is_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
+            return _json_error("Unauthorized", 401)
         next_target = request.full_path if request.query_string else request.path
         return redirect(url_for("login", next=next_target))
 
     def _forbidden_response():
         if _is_api_request():
-            return jsonify({"error": "Forbidden"}), 403
+            return _json_error("Forbidden", 403)
         abort(403)
 
     @app.before_request
     def load_current_user() -> None:
         username = session.get("user")
         g.current_user = None
-        if not username:
-            return
-        try:
-            g.current_user = user_manager.get_user(username)
-        except KeyError:
-            session.pop("user", None)
+        g.auth_via_basic = False
+        if username:
+            try:
+                g.current_user = user_manager.get_user(username)
+                return
+            except KeyError:
+                session.pop("user", None)
+        user = _authenticate_basic_credentials()
+        if user is not None:
+            g.current_user = user
+            g.auth_via_basic = True
 
     @app.before_request
     def audit_authenticated_request() -> None:
@@ -323,6 +378,27 @@ def create_app(
         if request.path.startswith("/static/"):
             return
         now_ts = time.time()
+        using_basic = getattr(g, "auth_via_basic", False)
+        if using_basic:
+            cache_key = (user.username, request.path, request.method)
+            last_ts = basic_audit_cache.get(cache_key)
+            if last_ts is not None and now_ts - last_ts < 300:
+                return
+            metadata = _collect_login_metadata()
+            user_manager.record_login(
+                user.username,
+                ip_address=str(metadata.get("ip_address") or ""),
+                user_agent=str(metadata.get("user_agent") or ""),
+                client_type=metadata.get("client_type"),
+                platform=metadata.get("platform"),
+                browser=metadata.get("browser"),
+                event_type="access",
+                path=request.path,
+                method=request.method,
+                referrer=str(request.headers.get("Referer") or ""),
+            )
+            basic_audit_cache[cache_key] = now_ts
+            return
         last_event = session.get("_last_access_audit")
         should_record = False
         if not isinstance(last_event, dict):
@@ -412,38 +488,90 @@ def create_app(
             next_target = None
 
         if request.method == "POST":
-            username = request.form.get("username", "").strip()
-            password = request.form.get("password", "")
+            payload = _get_payload(request)
+            username = str(payload.get("username") or "").strip()
+            password = str(payload.get("password") or "")
             user = user_manager.authenticate(username, password)
             if user is None:
+                if request.is_json:
+                    return _json_error("账号或密码错误", 401)
                 error = "账号或密码错误"
             else:
-                session["user"] = user.username
-                session.permanent = True
-                metadata = _collect_login_metadata()
-                user_manager.record_login(
-                    user.username,
-                    ip_address=str(metadata.get("ip_address") or ""),
-                    user_agent=str(metadata.get("user_agent") or ""),
-                    client_type=metadata.get("client_type"),
-                    platform=metadata.get("platform"),
-                    browser=metadata.get("browser"),
-                    event_type="login",
-                    path=request.path,
-                    method=request.method,
-                    referrer=str(request.headers.get("Referer") or ""),
-                )
-                redirect_target = request.form.get("next") or request.args.get("next")
+                _finalize_login(user)
+                redirect_target = payload.get("next") or request.args.get("next")
                 if not _is_safe_redirect(redirect_target):
                     redirect_target = url_for("index")
+                if request.is_json:
+                    return jsonify(
+                        {
+                            "message": "登录成功",
+                            "username": user.username,
+                            "role": user.role,
+                            "permissions": _build_permissions(user),
+                        }
+                    )
                 return redirect(redirect_target)
         return render_template("login.html", error=error, next=next_target)
+
+    @app.post("/api/auth/login")
+    def api_login_route() -> Any:
+        user = _current_user()
+        if user is not None:
+            return jsonify(
+                {
+                    "message": "已登录",
+                    "username": user.username,
+                    "role": user.role,
+                    "permissions": _build_permissions(user),
+                }
+            )
+        payload = _get_payload(request)
+        username = str(payload.get("username") or "").strip()
+        password = str(payload.get("password") or "")
+        candidate = user_manager.authenticate(username, password)
+        if candidate is None:
+            return _json_error("账号或密码错误", 401)
+        _finalize_login(candidate)
+        return jsonify(
+            {
+                "message": "登录成功",
+                "username": candidate.username,
+                "role": candidate.role,
+                "permissions": _build_permissions(candidate),
+            }
+        )
 
     @app.post("/logout")
     @login_required
     def logout() -> Any:
+        username = _current_username()
         session.pop("user", None)
+        session.pop("_last_access_audit", None)
+        if request.is_json or _is_api_request():
+            return jsonify({"message": "已退出登录", "username": username})
         return redirect(url_for("login"))
+
+    @app.post("/api/auth/logout")
+    @login_required
+    def api_logout_route() -> Any:
+        username = _current_username()
+        session.pop("user", None)
+        session.pop("_last_access_audit", None)
+        return jsonify({"message": "已退出登录", "username": username})
+
+    @app.get("/api/auth/session")
+    def api_session_route() -> Any:
+        user = _current_user()
+        if user is None:
+            return jsonify({"authenticated": False})
+        return jsonify(
+            {
+                "authenticated": True,
+                "username": user.username,
+                "role": user.role,
+                "permissions": _build_permissions(user),
+            }
+        )
 
     @app.post("/stores/select")
     @login_required
