@@ -1,3 +1,4 @@
+import base64
 import json
 from pathlib import Path
 
@@ -18,6 +19,11 @@ def _perform_login(client) -> None:
         },
     )
     assert response.status_code in {302, 303}
+
+
+def _basic_auth_header(username: str, password: str) -> str:
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return f"Basic {token}"
 
 
 def test_login_success_creates_log(tmp_path: Path) -> None:
@@ -93,3 +99,69 @@ def test_login_records_are_sorted(tmp_path: Path) -> None:
     assert records[0].ip_address == "2.2.2.2"
     assert records[0].client_type in {"平板端", "移动端", "桌面端"}
     assert records[0].event_type == "login"
+
+
+def test_api_login_with_json(tmp_path: Path) -> None:
+    storage = tmp_path / "inventory.json"
+    user_storage = tmp_path / "users.json"
+    app = create_app(storage_path=storage, user_storage_path=user_storage)
+    app.config.update(TESTING=True, SERVER_NAME="localhost")
+
+    client = app.test_client()
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "admin"},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["username"] == "admin"
+    assert data["role"] == "super_admin"
+    assert data["permissions"]["can_manage_users"] is True
+    assert "session=" in response.headers.get("Set-Cookie", "")
+
+    follow_response = client.get("/api/items")
+    assert follow_response.status_code == 200
+
+
+def test_basic_auth_allows_api_access(tmp_path: Path) -> None:
+    storage = tmp_path / "inventory.json"
+    user_storage = tmp_path / "users.json"
+    app = create_app(storage_path=storage, user_storage_path=user_storage)
+    app.config.update(TESTING=True, SERVER_NAME="localhost")
+
+    client = app.test_client()
+    response = client.get(
+        "/api/items",
+        headers={"Authorization": _basic_auth_header("admin", "admin")},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+    unauthorized = client.get(
+        "/api/items",
+        headers={"Authorization": _basic_auth_header("admin", "wrong")},
+    )
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers.get("WWW-Authenticate", "").startswith("Basic")
+
+
+def test_api_session_reports_status(tmp_path: Path) -> None:
+    storage = tmp_path / "inventory.json"
+    user_storage = tmp_path / "users.json"
+    app = create_app(storage_path=storage, user_storage_path=user_storage)
+    app.config.update(TESTING=True, SERVER_NAME="localhost")
+
+    client = app.test_client()
+    unauthenticated = client.get("/api/auth/session")
+    assert unauthenticated.status_code == 200
+    assert unauthenticated.get_json() == {"authenticated": False}
+
+    authenticated = client.get(
+        "/api/auth/session",
+        headers={"Authorization": _basic_auth_header("admin", "admin")},
+    )
+    assert authenticated.status_code == 200
+    payload = authenticated.get_json()
+    assert payload["authenticated"] is True
+    assert payload["username"] == "admin"
+    assert payload["permissions"]["can_manage_items"] is True

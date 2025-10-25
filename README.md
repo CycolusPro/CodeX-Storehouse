@@ -71,6 +71,15 @@ curl -c cookies.txt -X POST http://localhost:5000/login \
 curl -b cookies.txt http://localhost:5000/api/items
 ```
 
+也可以直接调用 JSON 接口完成登录与退出，响应会包含当前角色与权限信息：
+
+- `POST /api/auth/login` —— 请求体：`{"username": "admin", "password": "admin"}`。
+  - 成功后返回 `username`、`role` 以及 `permissions` 字段，并自动下发会话 Cookie。
+- `POST /api/auth/logout` —— 退出当前会话，返回退出账号信息。
+- `GET /api/auth/session` —— 查询登录状态，未登录返回 `{"authenticated": false}`。
+
+> 📱 所有 `/api/` 接口现在同时支持 **HTTP Basic Auth**，可直接通过 `Authorization: Basic <base64(username:password)>` 头部访问，适合 iOS 快捷指令等无需管理 Cookie 的客户端。服务端会针对同一用户/路径节流访问日志，避免频繁记录。
+
 ### 门店与分类管理
 
 - `POST /stores` —— **权限：** `super_admin`
