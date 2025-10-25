@@ -137,6 +137,38 @@ curl -b cookies.txt http://localhost:5000/api/items
   - 参数：`store_id`、`mode=day|month`、`start=YYYY-MM-DD`、`end=YYYY-MM-DD`。
   - 返回指定时间范围的入库量、出库量与净变动统计。
 
+### 快捷指令与自动化调用
+
+为了方便 iOS/iPadOS 快捷指令及其他自动化脚本集成，应用新增了免会话的令牌认证与简化接口：
+
+- `POST /api/auth/token`
+  - JSON 请求体需包含 `username`、`password`，可选 `expires_in`（单位：秒，默认 3600，最大 30 天）。
+  - 返回 `token`、`expires_at`、`expires_in` 以及当前用户角色信息。
+  - 之后可在任意 API 请求头加入 `Authorization: Bearer <token>`，或通过查询参数 `api_token=<token>` 完成认证。
+
+基于令牌认证，系统提供了一组针对快捷指令场景封装的端点：
+
+- `GET /api/shortcuts/profile`
+  - 返回当前用户信息、权限、全部门店与分类列表，方便在快捷指令中构建选择器。
+- `GET /api/shortcuts/items/summary`
+  - 查询参数：`name`（必填）、`store_id`（可选）。
+  - 返回单个 SKU 的库存数量、单位、分类/门店名称、是否触发低库存等摘要。
+- `POST /api/shortcuts/items/adjust`
+  - JSON 请求体示例：
+
+    ```json
+    {
+      "name": "测试零件",
+      "action": "out",
+      "quantity": 3,
+      "store_id": "default"
+    }
+    ```
+
+  - `action` 支持 `set`（重置数量）、`in`（入库）、`out`（出库）、`transfer`（门店调拨）。
+  - `transfer` 额外需要 `target_store_id` 字段。
+  - 所有成功响应均包含 `status="success"` 以及最新库存快照；错误响应会返回 `status="error"` 与具体错误码。
+
 ### 网页端辅助接口
 
 - `POST /stores/select` —— **权限：** 登录用户

@@ -7,7 +7,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Mapping, Tuple
 from functools import wraps
 from urllib.parse import urlsplit, urljoin
 import os
@@ -28,6 +28,7 @@ from flask import (
 )
 import xlrd
 import xlwt
+from itsdangerous import BadData, URLSafeSerializer
 
 from .inventory import (
     InventoryHistoryEntry,
@@ -84,6 +85,14 @@ def create_app(
         "INVENTORY_APP_SECRET", "inventory-secret-key"
     )
     app.permanent_session_lifetime = timedelta(days=14)
+
+    app.config.setdefault("API_TOKEN_SALT", "inventory-api-token")
+    app.config.setdefault("API_TOKEN_DEFAULT_AGE", 3600)
+    app.config.setdefault("API_TOKEN_MAX_AGE", 60 * 60 * 24 * 30)
+
+    token_serializer = URLSafeSerializer(
+        app.config["SECRET_KEY"], salt=app.config["API_TOKEN_SALT"]
+    )
 
     manager = InventoryManager(storage_path=storage_path)
     user_storage = (
@@ -159,6 +168,115 @@ def create_app(
             "platform": platform,
             "browser": browser,
         }
+
+    def _json_error(
+        message: str,
+        status: int = 400,
+        *,
+        code: Optional[str] = None,
+        status_field: bool = False,
+    ) -> Any:
+        payload: Dict[str, Any] = {"error": message}
+        if code:
+            payload["code"] = code
+        if status_field:
+            payload["status"] = "error"
+        return jsonify(payload), status
+
+    def _parse_token_expiration(value: Any, default: int) -> int:
+        if value is None or value == "":
+            return default
+        candidate: Optional[int]
+        if isinstance(value, bool):
+            candidate = None
+        elif isinstance(value, int):
+            candidate = value
+        elif isinstance(value, float):
+            candidate = int(value)
+        else:
+            try:
+                candidate = int(str(value).strip())
+            except (TypeError, ValueError):
+                candidate = None
+        if candidate is None or candidate <= 0:
+            return default
+        max_age = int(app.config.get("API_TOKEN_MAX_AGE", default))
+        return min(candidate, max_age)
+
+    def _extract_api_token() -> Optional[str]:
+        auth_header = request.headers.get("Authorization")
+        if isinstance(auth_header, str):
+            scheme, _, token_value = auth_header.partition(" ")
+            if scheme.lower() == "bearer" and token_value.strip():
+                return token_value.strip()
+        header_token = request.headers.get("X-API-Token") or request.headers.get(
+            "X-Api-Token"
+        )
+        if isinstance(header_token, str) and header_token.strip():
+            return header_token.strip()
+        query_token = request.args.get("api_token")
+        if isinstance(query_token, str) and query_token.strip():
+            return query_token.strip()
+        return None
+
+    def _issue_api_token(username: str, lifetime: int) -> Tuple[str, int, int]:
+        issued_at = int(time.time())
+        expires_at = issued_at + lifetime
+        payload = {"u": username, "iat": issued_at, "exp": expires_at}
+        token = token_serializer.dumps(payload)
+        return token, issued_at, expires_at
+
+    def _authenticate_api_token(token: str) -> Optional[Any]:
+        try:
+            payload = token_serializer.loads(token)
+        except BadData:
+            return None
+        username = payload.get("u")
+        exp_value = payload.get("exp")
+        if not username or exp_value is None:
+            return None
+        try:
+            expires_at = int(exp_value)
+        except (TypeError, ValueError):
+            return None
+        if time.time() > expires_at:
+            return None
+        try:
+            user = user_manager.get_user(str(username))
+        except KeyError:
+            return None
+        g.api_token_payload = payload
+        return user
+
+    def _parse_int_value(value: Any) -> Optional[int]:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _build_item_snapshot(item: InventoryItem) -> Dict[str, Any]:
+        stores_map = _list_stores()
+        categories_map = _list_categories()
+        payload = item.to_dict()
+        category_id = payload.get("category") or ""
+        category_entry = categories_map.get(category_id, {})
+        payload["category_id"] = category_id or None
+        payload["category_name"] = category_entry.get("name") or (
+            category_id or "未分类"
+        )
+        store_entry = stores_map.get(item.store_id, {})
+        payload["store_name"] = store_entry.get("name") or item.store_id
+        threshold_value = item.threshold
+        payload["low_stock"] = (
+            threshold_value is not None and item.quantity <= threshold_value
+        )
+        return payload
 
     def _build_permissions(user: Optional[Any]) -> Dict[str, bool]:
         role = getattr(user, "role", None)
@@ -258,20 +376,49 @@ def create_app(
             "timeline_is_demo": timeline_is_demo,
         }
 
+    def _match_store_identifier(
+        value: Any, stores: Optional[Mapping[str, Mapping[str, Any]]] = None
+    ) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            candidate = value.strip()
+        else:
+            candidate = str(value).strip()
+        if not candidate:
+            return None
+        if stores is None:
+            stores = _list_stores()
+        if candidate in stores:
+            return candidate
+        normalized = candidate.casefold()
+        for store_id, entry in stores.items():
+            if store_id.casefold() == normalized:
+                return store_id
+            name = str(entry.get("name") or "").strip()
+            if name and name.casefold() == normalized:
+                return store_id
+        return None
+
     def _resolve_store_id(store_id: Optional[str] = None) -> str:
         stores = _list_stores()
-        if store_id and store_id in stores:
-            session["store_id"] = store_id
-            return store_id
-        selected = session.get("store_id")
+        use_session = not getattr(g, "auth_via_token", False)
+        matched_store = _match_store_identifier(store_id, stores)
+        if matched_store:
+            if use_session:
+                session["store_id"] = matched_store
+            return matched_store
+        selected = session.get("store_id") if use_session else None
         if selected in stores:
             return selected
         if stores:
             first = next(iter(stores))
-            session["store_id"] = first
+            if use_session:
+                session["store_id"] = first
             return first
         created = manager.create_store("默认门店")
-        session["store_id"] = created["id"]
+        if use_session:
+            session["store_id"] = created["id"]
         return created["id"]
 
     def _resolve_category_id(category_id: Optional[str]) -> Optional[str]:
@@ -290,30 +437,42 @@ def create_app(
 
     def _unauthorized_response():
         if _is_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
+            return _json_error(
+                "Unauthorized", 401, code="unauthorized", status_field=True
+            )
         next_target = request.full_path if request.query_string else request.path
         return redirect(url_for("login", next=next_target))
 
     def _forbidden_response():
         if _is_api_request():
-            return jsonify({"error": "Forbidden"}), 403
+            return _json_error("Forbidden", 403, code="forbidden", status_field=True)
         abort(403)
 
     @app.before_request
     def load_current_user() -> None:
-        username = session.get("user")
         g.current_user = None
-        if not username:
-            return
-        try:
-            g.current_user = user_manager.get_user(username)
-        except KeyError:
-            session.pop("user", None)
+        g.auth_via_token = False
+        g.api_token_payload = None
+        username = session.get("user")
+        if username:
+            try:
+                g.current_user = user_manager.get_user(username)
+                return
+            except KeyError:
+                session.pop("user", None)
+        token = _extract_api_token()
+        if token:
+            user = _authenticate_api_token(token)
+            if user is not None:
+                g.current_user = user
+                g.auth_via_token = True
 
     @app.before_request
     def audit_authenticated_request() -> None:
         user = _current_user()
         if user is None:
+            return
+        if getattr(g, "auth_via_token", False):
             return
         if request.method in {"OPTIONS", "HEAD"}:
             return
@@ -444,6 +603,65 @@ def create_app(
     def logout() -> Any:
         session.pop("user", None)
         return redirect(url_for("login"))
+
+    @app.post("/api/auth/token")
+    def issue_api_token_route() -> Any:
+        payload = _get_payload(request)
+        username = str(
+            payload.get("username")
+            or request.form.get("username")
+            or ""
+        ).strip()
+        password = str(
+            payload.get("password")
+            or request.form.get("password")
+            or ""
+        )
+        if not username or not password:
+            return _json_error(
+                "Missing username or password",
+                400,
+                code="missing_credentials",
+                status_field=True,
+            )
+        user = user_manager.authenticate(username, password)
+        if user is None:
+            return _json_error(
+                "Invalid username or password",
+                401,
+                code="invalid_credentials",
+                status_field=True,
+            )
+        default_age = int(app.config.get("API_TOKEN_DEFAULT_AGE", 3600))
+        expires_source = payload.get("expires_in")
+        if expires_source is None:
+            expires_source = request.form.get("expires_in")
+        expires_in = _parse_token_expiration(expires_source, default=default_age)
+        token, issued_at, expires_at = _issue_api_token(user.username, expires_in)
+        metadata = _collect_login_metadata()
+        user_manager.record_login(
+            user.username,
+            ip_address=str(metadata.get("ip_address") or ""),
+            user_agent=str(metadata.get("user_agent") or ""),
+            client_type=metadata.get("client_type"),
+            platform=metadata.get("platform"),
+            browser=metadata.get("browser"),
+            event_type="login",
+            path=request.path,
+            method=request.method,
+            referrer=str(request.headers.get("Referer") or ""),
+        )
+        return jsonify(
+            {
+                "status": "success",
+                "token": token,
+                "token_type": "Bearer",
+                "issued_at": issued_at,
+                "expires_at": expires_at,
+                "expires_in": expires_in,
+                "user": {"username": user.username, "role": user.role},
+            }
+        )
 
     @app.post("/stores/select")
     @login_required
@@ -877,6 +1095,372 @@ def create_app(
         store_id = _resolve_store_id(request.args.get("store_id"))
         history_entries = manager.list_history(store_id=store_id, limit=limit)
         return jsonify([entry.to_dict() for entry in history_entries])
+
+    @app.get("/api/shortcuts/profile")
+    @login_required
+    def shortcuts_profile() -> Any:
+        user = _current_user()
+        stores_map = _list_stores()
+        categories_map = _list_categories()
+        stores = [
+            {
+                "id": store_id,
+                "name": entry.get("name") or store_id,
+                "items_count": entry.get("items_count", 0),
+            }
+            for store_id, entry in sorted(
+                stores_map.items(),
+                key=lambda item: str(item[1].get("name") or item[0]).lower(),
+            )
+        ]
+        categories = [
+            {
+                "id": category_id,
+                "name": entry.get("name") or category_id,
+            }
+            for category_id, entry in sorted(
+                categories_map.items(),
+                key=lambda item: str(item[1].get("name") or item[0]).lower(),
+            )
+        ]
+        return jsonify(
+            {
+                "status": "success",
+                "user": {
+                    "username": getattr(user, "username", None),
+                    "role": getattr(user, "role", None),
+                },
+                "permissions": _build_permissions(user),
+                "stores": stores,
+                "categories": categories,
+            }
+        )
+
+    @app.get("/api/shortcuts/items/summary")
+    @login_required
+    def shortcuts_item_summary() -> Any:
+        name_value = request.args.get("name") or request.args.get("item") or ""
+        name = str(name_value).strip()
+        if not name:
+            return _json_error(
+                "Missing item name",
+                code="missing_name",
+                status_field=True,
+            )
+        stores_map = _list_stores()
+        store_hint_raw = (
+            request.args.get("store_id")
+            or request.args.get("store")
+            or request.args.get("store_name")
+        )
+        store_hint = str(store_hint_raw).strip() if store_hint_raw else None
+        resolved_store: Optional[str]
+        if store_hint:
+            resolved_store = _match_store_identifier(store_hint, stores_map)
+            if resolved_store is None:
+                return _json_error(
+                    "Store not found",
+                    404,
+                    code="store_not_found",
+                    status_field=True,
+                )
+        else:
+            resolved_store = _resolve_store_id(None)
+        if not resolved_store:
+            return _json_error(
+                "Store not found",
+                404,
+                code="store_not_found",
+                status_field=True,
+            )
+        try:
+            item = manager.get_item(name, store_id=resolved_store)
+        except KeyError:
+            return _json_error(
+                "Item not found",
+                404,
+                code="item_not_found",
+                status_field=True,
+            )
+        return jsonify({"status": "success", "item": _build_item_snapshot(item)})
+
+    @app.post("/api/shortcuts/items/adjust")
+    @login_required
+    def shortcuts_adjust_item() -> Any:
+        raw_payload = _get_payload(request)
+        payload: Mapping[str, Any]
+        if isinstance(raw_payload, Mapping):
+            payload = raw_payload
+        else:
+            payload = {}
+        name_value = (
+            payload.get("name")
+            or payload.get("item")
+            or request.args.get("name")
+            or ""
+        )
+        name = str(name_value).strip()
+        if not name:
+            return _json_error(
+                "Missing item name",
+                code="missing_name",
+                status_field=True,
+            )
+        action_raw = payload.get("action") or payload.get("type") or "set"
+        action_key = str(action_raw).strip().lower()
+        action_aliases = {
+            "update": "set",
+            "create": "set",
+            "increase": "in",
+            "increment": "in",
+            "add": "in",
+            "decrease": "out",
+            "decrement": "out",
+            "remove": "out",
+            "subtract": "out",
+        }
+        normalized_action = action_aliases.get(action_key, action_key or "set")
+        store_hint_value = (
+            payload.get("store_id")
+            or payload.get("store")
+            or payload.get("store_name")
+            or request.args.get("store_id")
+            or request.args.get("store")
+            or request.args.get("store_name")
+        )
+        if isinstance(store_hint_value, str):
+            store_hint = store_hint_value.strip()
+        elif store_hint_value is None:
+            store_hint = None
+        else:
+            store_hint = str(store_hint_value).strip()
+        if store_hint == "":
+            store_hint = None
+        stores_map = _list_stores()
+        if store_hint:
+            resolved_store = _match_store_identifier(store_hint, stores_map)
+            if resolved_store is None:
+                return _json_error(
+                    "Store not found",
+                    404,
+                    code="store_not_found",
+                    status_field=True,
+                )
+        else:
+            resolved_store = _resolve_store_id(None)
+        permissions = _build_permissions(_current_user())
+        username = _current_username()
+        if normalized_action in {"set"}:
+            if not permissions["can_manage_items"]:
+                return _json_error(
+                    "Permission denied",
+                    403,
+                    code="forbidden",
+                    status_field=True,
+                )
+            quantity_value = payload.get("quantity")
+            quantity = _parse_int_value(quantity_value)
+            if quantity is None or quantity < 0:
+                return _json_error(
+                    "Quantity must be zero or greater",
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            unit_value = payload.get("unit")
+            unit = str(unit_value).strip() if unit_value is not None else None
+            threshold_provided = "threshold" in payload
+            threshold = _parse_threshold_value(payload.get("threshold"))
+            category_value = (
+                payload.get("category_id")
+                or payload.get("category")
+                or payload.get("category_name")
+            )
+            try:
+                item = manager.set_quantity(
+                    name,
+                    quantity,
+                    unit=unit,
+                    threshold=threshold,
+                    keep_threshold=not threshold_provided,
+                    category=category_value,
+                    store_id=resolved_store,
+                    user=username,
+                )
+            except ValueError as exc:
+                return _json_error(
+                    str(exc),
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            return jsonify(
+                {
+                    "status": "success",
+                    "action": "set",
+                    "store_id": resolved_store,
+                    "item": _build_item_snapshot(item),
+                }
+            )
+        if normalized_action == "in":
+            if not permissions["can_adjust_in"]:
+                return _json_error(
+                    "Permission denied",
+                    403,
+                    code="forbidden",
+                    status_field=True,
+                )
+            quantity = _parse_int_value(payload.get("quantity"))
+            if quantity is None or quantity <= 0:
+                return _json_error(
+                    "Quantity must be greater than zero",
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            try:
+                item = manager.adjust_quantity(
+                    name,
+                    quantity,
+                    store_id=resolved_store,
+                    user=username,
+                )
+            except KeyError:
+                return _json_error(
+                    "Item not found",
+                    404,
+                    code="item_not_found",
+                    status_field=True,
+                )
+            except ValueError as exc:
+                return _json_error(
+                    str(exc),
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            return jsonify(
+                {
+                    "status": "success",
+                    "action": "in",
+                    "store_id": resolved_store,
+                    "item": _build_item_snapshot(item),
+                }
+            )
+        if normalized_action == "out":
+            if not permissions["can_adjust_out"]:
+                return _json_error(
+                    "Permission denied",
+                    403,
+                    code="forbidden",
+                    status_field=True,
+                )
+            quantity = _parse_int_value(payload.get("quantity"))
+            if quantity is None or quantity <= 0:
+                return _json_error(
+                    "Quantity must be greater than zero",
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            try:
+                item = manager.adjust_quantity(
+                    name,
+                    -quantity,
+                    store_id=resolved_store,
+                    user=username,
+                )
+            except KeyError:
+                return _json_error(
+                    "Item not found",
+                    404,
+                    code="item_not_found",
+                    status_field=True,
+                )
+            except ValueError as exc:
+                return _json_error(
+                    str(exc),
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            return jsonify(
+                {
+                    "status": "success",
+                    "action": "out",
+                    "store_id": resolved_store,
+                    "item": _build_item_snapshot(item),
+                }
+            )
+        if normalized_action == "transfer":
+            if not permissions["can_manage_items"]:
+                return _json_error(
+                    "Permission denied",
+                    403,
+                    code="forbidden",
+                    status_field=True,
+                )
+            quantity = _parse_int_value(payload.get("quantity"))
+            if quantity is None or quantity <= 0:
+                return _json_error(
+                    "Quantity must be greater than zero",
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            target_store_raw = (
+                payload.get("target_store_id")
+                or payload.get("target_store")
+                or payload.get("target")
+            )
+            target_store = str(target_store_raw).strip() if target_store_raw else ""
+            if not target_store:
+                return _json_error(
+                    "Target store is required",
+                    code="missing_target_store",
+                    status_field=True,
+                )
+            stores_map = _list_stores()
+            if target_store not in stores_map:
+                return _json_error(
+                    "Target store not found",
+                    404,
+                    code="target_store_not_found",
+                    status_field=True,
+                )
+            if resolved_store == target_store:
+                return _json_error(
+                    "Source and target stores must differ",
+                    code="invalid_target_store",
+                    status_field=True,
+                )
+            try:
+                source_item, target_item = manager.transfer_item(
+                    name,
+                    quantity,
+                    source_store_id=resolved_store,
+                    target_store_id=target_store,
+                    user=username,
+                )
+            except KeyError:
+                return _json_error(
+                    "Item not found",
+                    404,
+                    code="item_not_found",
+                    status_field=True,
+                )
+            except ValueError as exc:
+                return _json_error(
+                    str(exc),
+                    code="invalid_quantity",
+                    status_field=True,
+                )
+            return jsonify(
+                {
+                    "status": "success",
+                    "action": "transfer",
+                    "source": _build_item_snapshot(source_item),
+                    "target": _build_item_snapshot(target_item),
+                }
+            )
+        return _json_error(
+            "Unsupported action",
+            code="unsupported_action",
+            status_field=True,
+        )
 
     @app.get("/api/items/template")
     @login_required
