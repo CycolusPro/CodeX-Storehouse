@@ -104,15 +104,6 @@ def create_app(
     )
     user_manager = UserManager(user_storage)
 
-    def _json_error(message: str, status_code: int) -> Response:
-        response = jsonify({"error": message})
-        response.status_code = status_code
-        if status_code == 401:
-            response.headers.setdefault(
-                "WWW-Authenticate", 'Basic realm="Inventory", charset="UTF-8"'
-            )
-        return response
-
     def _authenticate_basic_credentials() -> Optional[Any]:
         auth_header = request.headers.get("Authorization", "")
         if not auth_header or not auth_header.startswith("Basic "):
@@ -168,6 +159,138 @@ def create_app(
     def _current_username() -> Optional[str]:
         user = _current_user()
         return None if user is None else user.username
+
+    def _parse_batch_payload(raw_payload: str) -> List[Dict[str, Any]]:
+        if not raw_payload:
+            return []
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(payload, list):
+            return []
+        normalized: List[Dict[str, Any]] = []
+        for entry in payload:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                quantity = int(entry.get("quantity"))
+            except (TypeError, ValueError):
+                continue
+            if quantity <= 0:
+                continue
+            normalized.append({"name": name, "quantity": quantity})
+        return normalized
+
+    def _validate_batch_entries(
+        entries: Sequence[Mapping[str, Any]],
+        *,
+        mode: str,
+        store_id: str,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        normalized: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        if mode not in {"in", "out"}:
+            return normalized, [{"code": "invalid_mode", "message": "不支持的批量操作类型"}]
+        items_map = manager.list_items(store_id=store_id)
+        names_seen: set[str] = set()
+        for entry in entries:
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                quantity = int(entry.get("quantity"))
+            except (TypeError, ValueError):
+                errors.append(
+                    {
+                        "code": "invalid_quantity",
+                        "name": name,
+                        "message": "数量无效",
+                    }
+                )
+                continue
+            if quantity <= 0:
+                errors.append(
+                    {
+                        "code": "invalid_quantity",
+                        "name": name,
+                        "message": "数量需大于 0",
+                    }
+                )
+                continue
+            if name not in items_map:
+                errors.append(
+                    {
+                        "code": "missing",
+                        "name": name,
+                        "requested": quantity,
+                        "message": "SKU 不存在",
+                    }
+                )
+                continue
+            item = items_map[name]
+            if mode == "out" and quantity > item.quantity:
+                errors.append(
+                    {
+                        "code": "insufficient",
+                        "name": name,
+                        "requested": quantity,
+                        "available": item.quantity,
+                        "unit": item.unit,
+                        "message": "出库数量超出当前库存",
+                    }
+                )
+                continue
+            if name in names_seen:
+                existing = next(
+                    (e for e in normalized if e["name"] == name),
+                    None,
+                )
+                if existing:
+                    existing["quantity"] += quantity
+                continue
+            names_seen.add(name)
+            normalized.append(
+                {
+                    "name": name,
+                    "quantity": quantity,
+                    "available": item.quantity,
+                    "unit": item.unit,
+                }
+            )
+        return normalized, errors
+
+    def _apply_batch_entries(
+        entries: Sequence[Mapping[str, Any]],
+        *,
+        mode: str,
+        store_id: str,
+        user: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        processed: List[Dict[str, Any]] = []
+        for entry in entries:
+            name = str(entry.get("name"))
+            quantity = int(entry.get("quantity"))
+            delta = quantity if mode == "in" else -quantity
+            item = manager.adjust_quantity(
+                name,
+                delta,
+                store_id=store_id,
+                user=user,
+            )
+            processed.append(
+                {
+                    "name": name,
+                    "quantity": quantity,
+                    "mode": mode,
+                    "new_quantity": item.quantity,
+                    "unit": item.unit,
+                }
+            )
+        return processed
 
     def _collect_login_metadata() -> Dict[str, Optional[str]]:
         forwarded_for = request.headers.get("X-Forwarded-For", "")
@@ -225,13 +348,22 @@ def create_app(
         *,
         code: Optional[str] = None,
         status_field: bool = False,
-    ) -> Any:
+        **extra: Any,
+    ) -> Response:
         payload: Dict[str, Any] = {"error": message}
         if code:
             payload["code"] = code
         if status_field:
             payload["status"] = "error"
-        return jsonify(payload), status
+        if extra:
+            payload.update(extra)
+        response = jsonify(payload)
+        response.status_code = status
+        if status == 401:
+            response.headers.setdefault(
+                "WWW-Authenticate", 'Basic realm="Inventory", charset="UTF-8"'
+            )
+        return response
 
     def _parse_token_expiration(value: Any, default: int) -> int:
         if value is None or value == "":
@@ -502,6 +634,7 @@ def create_app(
     def load_current_user() -> None:
         g.current_user = None
         g.auth_via_token = False
+        g.auth_via_basic = False
         g.api_token_payload = None
         username = session.get("user")
         if username:
@@ -516,6 +649,18 @@ def create_app(
             if user is not None:
                 g.current_user = user
                 g.auth_via_token = True
+
+    @app.before_request
+    def authenticate_basic_requests() -> None:
+        if _current_user() is not None:
+            return
+        if not request.path.startswith("/api/"):
+            return
+        user = _authenticate_basic_credentials()
+        if user is None:
+            return
+        g.current_user = user
+        g.auth_via_basic = True
 
     @app.before_request
     def audit_authenticated_request() -> None:
@@ -692,6 +837,20 @@ def create_app(
                 "username": candidate.username,
                 "role": candidate.role,
                 "permissions": _build_permissions(candidate),
+            }
+        )
+
+    @app.get("/api/auth/session")
+    def api_session_status() -> Any:
+        user = _current_user()
+        if user is None:
+            return jsonify({"authenticated": False})
+        return jsonify(
+            {
+                "authenticated": True,
+                "username": user.username,
+                "role": user.role,
+                "permissions": _build_permissions(user),
             }
         )
 
@@ -995,6 +1154,7 @@ def create_app(
             preserved_query=preserved_query,
             build_query=build_query,
             inventory_search=inventory_search,
+            all_item_names=[item.name for item in items_sorted],
         )
 
     @app.get("/history")
@@ -1131,6 +1291,40 @@ def create_app(
         except ValueError as exc:
             return {"error": str(exc)}, 400
         return jsonify(item.to_dict())
+
+    @app.post("/api/batch-adjust")
+    @login_required
+    def batch_adjust_api() -> Any:
+        user = _current_user()
+        permissions = _build_permissions(user)
+        payload = request.get_json(silent=True) or {}
+        mode = str(payload.get("mode") or "out").strip().lower()
+        if mode not in {"in", "out"}:
+            return _json_error("无效的批量操作类型", 400, code="invalid_mode")
+        if mode == "out" and not permissions.get("can_adjust_out"):
+            return _json_error("无权执行批量出库", 403, code="forbidden")
+        if mode == "in" and not permissions.get("can_adjust_in"):
+            return _json_error("无权执行批量入库", 403, code="forbidden")
+        entries_payload = payload.get("entries")
+        if not isinstance(entries_payload, list):
+            entries_payload = []
+        store_id = _resolve_store_id(payload.get("store_id"))
+        normalized_entries, errors = _validate_batch_entries(
+            entries_payload, mode=mode, store_id=store_id
+        )
+        if errors:
+            return _json_error(
+                "批量调整存在错误", 400, code="invalid_entries", errors=errors
+            )
+        if not normalized_entries:
+            return _json_error("请至少添加一条记录", 400, code="empty_entries")
+        processed = _apply_batch_entries(
+            normalized_entries,
+            mode=mode,
+            store_id=store_id,
+            user=_current_username(),
+        )
+        return jsonify({"success": True, "processed": processed, "mode": mode})
 
     @app.post("/api/items/<string:name>/transfer")
     @role_required("admin", "super_admin")
@@ -2037,6 +2231,38 @@ def create_app(
                 )
             except ValueError:
                 pass
+        elif action in {"batch_adjust", "batch_out"}:
+            mode_value = request.form.get("mode") or "out"
+            mode = "in" if mode_value and mode_value.lower() == "in" else "out"
+            required_permission = (
+                "can_adjust_in" if mode == "in" else "can_adjust_out"
+            )
+            if not permissions.get(required_permission):
+                return redirect(url_for("index"))
+            payload_raw = request.form.get("batch_payload", "").strip()
+            entries_payload = _parse_batch_payload(payload_raw)
+            normalized_entries, errors = _validate_batch_entries(
+                entries_payload,
+                mode=mode,
+                store_id=selected_store,
+            )
+            if errors or not normalized_entries:
+                if errors:
+                    flash_messages = [error.get("message", "批量调整失败") for error in errors]
+                    flash("；".join(flash_messages), "error")
+                else:
+                    flash("请至少添加一条批量调整记录", "error")
+                return redirect(url_for("index"))
+            _apply_batch_entries(
+                normalized_entries,
+                mode=mode,
+                store_id=selected_store,
+                user=username,
+            )
+            flash(
+                f"已完成{ '批量入库' if mode == 'in' else '批量出库' }操作，共 {len(normalized_entries)} 条",
+                "success",
+            )
         elif action == "update":
             if not permissions["can_manage_items"]:
                 return redirect(url_for("index"))
