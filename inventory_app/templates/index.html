@@ -531,6 +531,71 @@
         gap: 10px;
         justify-content: flex-end;
       }
+      .batch-out__editor {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 16px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+      .batch-out__inputs {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+      .batch-out__inputs label {
+        margin: 0;
+      }
+      .batch-out__list {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 12px;
+        max-height: 240px;
+        overflow-y: auto;
+        padding: 4px;
+      }
+      .batch-out__item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 16px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .batch-out__item-main {
+        display: grid;
+        gap: 4px;
+      }
+      .batch-out__item-name {
+        font-weight: 600;
+      }
+      .batch-out__item-meta {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .batch-out__empty {
+        padding: 24px 12px;
+        text-align: center;
+        border: 1px dashed var(--border);
+        border-radius: 16px;
+        color: var(--muted);
+      }
+      .batch-out__remove {
+        white-space: nowrap;
+      }
+      @media (max-width: 768px) {
+        .batch-out__editor {
+          padding: 12px;
+        }
+        .batch-out__item {
+          align-items: flex-start;
+        }
+      }
       .pagination {
         display: flex;
         flex-wrap: wrap;
@@ -1161,6 +1226,7 @@
                   <button id="actionsMenuBtn" class="btn btn--outline" aria-haspopup="menu" aria-expanded="false">库存操作</button>
                   <div id="actionsMenu" class="menu hidden">
                     <button type="button" data-open-modal="#addModal">新增 SKU</button>
+                    <button type="button" id="batchOutTrigger" data-open-modal="#batchOutModal">批量出库</button>
                     <button type="button" id="importTrigger">从表格导入</button>
                     <a href="/api/items/export">导出库存表格</a>
                     <a href="/api/items/template">下载导入模板</a>
@@ -1489,6 +1555,45 @@
       </div>
     </div>
 
+    <div id="batchOutModal" class="modal hidden" data-modal>
+      <div class="modal__dialog" style="max-width:640px;">
+        <button type="button" class="modal__close" data-close-modal>&times;</button>
+        <h2 style="margin:0; font-size:22px;">批量出库</h2>
+        <p class="panel__meta">逐条添加需要出库的 SKU，确认后将一次性完成出库操作。</p>
+        <form id="batchOutForm" method="post" action="/submit" class="inventory-form" novalidate>
+          <input type="hidden" name="action" value="batch_out" />
+          <input type="hidden" name="store_id" id="batchOutStoreId" value="{{ selected_store }}" />
+          <input type="hidden" name="next" value="{{ request.full_path }}" />
+          <input type="hidden" name="batch_payload" id="batchOutPayload" value="[]" />
+          <div class="batch-out__editor">
+            <div class="batch-out__inputs">
+              <label>SKU 名称
+                <input type="text" id="batchOutName" list="batchOutSkuOptions" placeholder="输入或选择 SKU 名称" autocomplete="off" />
+              </label>
+              <label>出库数量
+                <input type="number" id="batchOutQuantity" min="1" step="1" placeholder="请输入数量" />
+              </label>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+              <button type="button" class="btn btn--outline" id="batchOutAddBtn">添加到出库列表</button>
+            </div>
+          </div>
+          <div class="batch-out__list" id="batchOutList">
+            <div class="batch-out__empty">暂未添加任何出库项</div>
+          </div>
+          <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+            <button type="button" class="btn btn--ghost" data-close-modal>取消</button>
+            <button type="submit" class="btn btn--primary" id="batchOutSubmit" disabled>确认出库</button>
+          </div>
+        </form>
+        <datalist id="batchOutSkuOptions">
+          {% for name in all_item_names %}
+            <option value="{{ name }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+
     <div id="transferModal" class="modal hidden" data-modal>
       <div class="modal__dialog" style="max-width:520px;">
         <button type="button" class="modal__close" data-close-modal>&times;</button>
@@ -1796,6 +1901,174 @@
             }, 120);
           });
         });
+      })();
+
+      (function setupBatchOutModal(){
+        const modal = document.getElementById('batchOutModal');
+        if(!modal) return;
+        const trigger = document.getElementById('batchOutTrigger');
+        const form = document.getElementById('batchOutForm');
+        const nameInput = document.getElementById('batchOutName');
+        const quantityInput = document.getElementById('batchOutQuantity');
+        const addBtn = document.getElementById('batchOutAddBtn');
+        const list = document.getElementById('batchOutList');
+        const payloadInput = document.getElementById('batchOutPayload');
+        const submitBtn = document.getElementById('batchOutSubmit');
+        const storeInput = document.getElementById('batchOutStoreId');
+        const storeSelect = document.querySelector('select[name="store_id"]');
+        const entries = [];
+        const submitDefaultText = submitBtn ? submitBtn.textContent : '';
+
+        function syncStore(){
+          if(storeInput){
+            storeInput.value = storeSelect?.value || '';
+          }
+        }
+
+        function clearInputs(){
+          if(nameInput){
+            nameInput.value = '';
+            nameInput.setCustomValidity('');
+          }
+          if(quantityInput){
+            quantityInput.value = '';
+            quantityInput.setCustomValidity('');
+          }
+        }
+
+        function updatePayload(){
+          if(payloadInput){
+            payloadInput.value = JSON.stringify(entries);
+          }
+          if(submitBtn){
+            submitBtn.disabled = entries.length === 0;
+          }
+        }
+
+        function renderList(){
+          if(!list) return;
+          list.innerHTML = '';
+          if(!entries.length){
+            const empty = document.createElement('div');
+            empty.className = 'batch-out__empty';
+            empty.textContent = '暂未添加任何出库项';
+            list.appendChild(empty);
+            updatePayload();
+            return;
+          }
+          entries.forEach((entry, index) => {
+            const row = document.createElement('div');
+            row.className = 'batch-out__item';
+            const main = document.createElement('div');
+            main.className = 'batch-out__item-main';
+            const nameEl = document.createElement('div');
+            nameEl.className = 'batch-out__item-name';
+            nameEl.textContent = entry.name;
+            const meta = document.createElement('div');
+            meta.className = 'batch-out__item-meta';
+            meta.textContent = `出库数量：${entry.quantity}`;
+            main.appendChild(nameEl);
+            main.appendChild(meta);
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn--ghost batch-out__remove';
+            removeBtn.textContent = '移除';
+            removeBtn.addEventListener('click', () => {
+              entries.splice(index, 1);
+              renderList();
+            });
+            row.appendChild(main);
+            row.appendChild(removeBtn);
+            list.appendChild(row);
+          });
+          updatePayload();
+        }
+
+        function resetModal(){
+          entries.splice(0, entries.length);
+          clearInputs();
+          if(submitBtn){
+            submitBtn.disabled = true;
+            submitBtn.textContent = submitDefaultText;
+          }
+          renderList();
+          syncStore();
+        }
+
+        function handleAdd(){
+          if(!nameInput || !quantityInput){
+            return;
+          }
+          const name = nameInput.value.trim();
+          if(!name){
+            nameInput.setCustomValidity('请输入 SKU 名称');
+            nameInput.reportValidity();
+            return;
+          }
+          nameInput.setCustomValidity('');
+          const parsedQuantity = parseInt(quantityInput.value, 10);
+          if(!Number.isFinite(parsedQuantity) || parsedQuantity <= 0){
+            quantityInput.setCustomValidity('请输入大于 0 的数量');
+            quantityInput.reportValidity();
+            return;
+          }
+          quantityInput.setCustomValidity('');
+          const existing = entries.find(entry => entry.name === name);
+          if(existing){
+            existing.quantity += parsedQuantity;
+          } else {
+            entries.push({ name, quantity: parsedQuantity });
+          }
+          clearInputs();
+          renderList();
+          nameInput.focus();
+        }
+
+        trigger?.addEventListener('click', () => {
+          resetModal();
+          setTimeout(() => nameInput?.focus(), 120);
+        });
+
+        addBtn?.addEventListener('click', handleAdd);
+        nameInput?.addEventListener('keydown', event => {
+          if(event.key === 'Enter'){
+            event.preventDefault();
+            handleAdd();
+          }
+        });
+        quantityInput?.addEventListener('keydown', event => {
+          if(event.key === 'Enter'){
+            event.preventDefault();
+            handleAdd();
+          }
+        });
+        nameInput?.addEventListener('input', () => nameInput.setCustomValidity(''));
+        quantityInput?.addEventListener('input', () => quantityInput.setCustomValidity(''));
+        storeSelect?.addEventListener('change', syncStore);
+        modal.querySelectorAll('[data-close-modal]').forEach(button => {
+          button.addEventListener('click', () => {
+            resetModal();
+          });
+        });
+        modal.addEventListener('click', event => {
+          if(event.target === modal){
+            resetModal();
+          }
+        });
+        form?.addEventListener('submit', event => {
+          if(!entries.length){
+            event.preventDefault();
+            return;
+          }
+          updatePayload();
+          if(submitBtn){
+            submitBtn.disabled = true;
+            submitBtn.textContent = '提交中…';
+          }
+        });
+
+        renderList();
+        syncStore();
       })();
 
       (function setupTransferModal(){

@@ -225,13 +225,19 @@ def create_app(
         *,
         code: Optional[str] = None,
         status_field: bool = False,
-    ) -> Any:
+    ) -> Response:
         payload: Dict[str, Any] = {"error": message}
         if code:
             payload["code"] = code
         if status_field:
             payload["status"] = "error"
-        return jsonify(payload), status
+        response = jsonify(payload)
+        response.status_code = status
+        if status == 401:
+            response.headers.setdefault(
+                "WWW-Authenticate", 'Basic realm="Inventory", charset="UTF-8"'
+            )
+        return response
 
     def _parse_token_expiration(value: Any, default: int) -> int:
         if value is None or value == "":
@@ -502,6 +508,7 @@ def create_app(
     def load_current_user() -> None:
         g.current_user = None
         g.auth_via_token = False
+        g.auth_via_basic = False
         g.api_token_payload = None
         username = session.get("user")
         if username:
@@ -516,6 +523,18 @@ def create_app(
             if user is not None:
                 g.current_user = user
                 g.auth_via_token = True
+
+    @app.before_request
+    def authenticate_basic_requests() -> None:
+        if _current_user() is not None:
+            return
+        if not request.path.startswith("/api/"):
+            return
+        user = _authenticate_basic_credentials()
+        if user is None:
+            return
+        g.current_user = user
+        g.auth_via_basic = True
 
     @app.before_request
     def audit_authenticated_request() -> None:
@@ -692,6 +711,20 @@ def create_app(
                 "username": candidate.username,
                 "role": candidate.role,
                 "permissions": _build_permissions(candidate),
+            }
+        )
+
+    @app.get("/api/auth/session")
+    def api_session_status() -> Any:
+        user = _current_user()
+        if user is None:
+            return jsonify({"authenticated": False})
+        return jsonify(
+            {
+                "authenticated": True,
+                "username": user.username,
+                "role": user.role,
+                "permissions": _build_permissions(user),
             }
         )
 
@@ -995,6 +1028,7 @@ def create_app(
             preserved_query=preserved_query,
             build_query=build_query,
             inventory_search=inventory_search,
+            all_item_names=[item.name for item in items_sorted],
         )
 
     @app.get("/history")
@@ -2037,6 +2071,37 @@ def create_app(
                 )
             except ValueError:
                 pass
+        elif action == "batch_out":
+            if not permissions["can_adjust_out"]:
+                return redirect(url_for("index"))
+            payload_raw = request.form.get("batch_payload", "").strip()
+            try:
+                payload = json.loads(payload_raw) if payload_raw else []
+            except json.JSONDecodeError:
+                payload = []
+            if not isinstance(payload, list):
+                payload = []
+            for entry in payload:
+                if not isinstance(entry, dict):
+                    continue
+                entry_name = str(entry.get("name") or "").strip()
+                if not entry_name:
+                    continue
+                try:
+                    entry_quantity = int(entry.get("quantity"))
+                except (TypeError, ValueError):
+                    continue
+                if entry_quantity <= 0:
+                    continue
+                try:
+                    manager.adjust_quantity(
+                        entry_name,
+                        -entry_quantity,
+                        store_id=selected_store,
+                        user=username,
+                    )
+                except (ValueError, KeyError):
+                    continue
         elif action == "update":
             if not permissions["can_manage_items"]:
                 return redirect(url_for("index"))
